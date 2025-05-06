@@ -1,0 +1,60 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+)
+
+// struct 中的变量首字母大写才能导出 json 包要求struct 的字段首字母大写，类似驼峰型命名规范
+type Location struct {
+	Label string
+	X     int
+	Y     int
+}
+
+// 关联类型的方法
+func (l Location) String() string {
+	return fmt.Sprintf("Label: %s, X: %d, Y: %d", l.Label, l.X, l.Y)
+}
+
+// 约定 构造函数 函数名称 ： New + 结构体名称 or new + 结构体名称
+func NewLocation(label string, x, y int) Location {
+	return Location{
+		Label: label,
+		X:     x,
+		Y:     y,
+	}
+}
+
+// 值传递 无效更改
+func changeLocation(l Location) {
+	l.X = 100
+	l.Y = 200
+}
+
+// exit on error
+func ExitOnError(err error) {
+	if err != nil {
+		fmt.Println("Error:", err)
+		os.Exit(1)
+	}
+}
+
+func main() {
+	fmt.Println("good day today!!")
+
+	location1 := Location{Label: "Location1", X: 10, Y: 20}
+	//深拷贝
+	location2 := location1
+	location2.Label = "Location2"
+
+	fmt.Printf("Location1: %+v\n", location1)
+	fmt.Printf("Location2: %+v\n", location2)
+	//struct 转化为 json
+	bytes, err := json.Marshal(location1)
+	ExitOnError(err)
+	fmt.Println("JSON:", string(bytes))
+
+	fmt.Println(location1.String())
+}
