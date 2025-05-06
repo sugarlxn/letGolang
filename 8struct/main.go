@@ -13,6 +13,30 @@ type Location struct {
 	Y     int
 }
 
+type Temperature struct {
+	Label string
+	Temp  float64
+}
+
+// 优先使用对象组合 而不是 类的继承 Favor object composition over class inheritance
+// struct 组合 composition
+type Weather struct {
+	Location    Location
+	Temperature Temperature
+}
+
+// struct 嵌入 embedding 使用嵌入的方式来组合结构体 Location 和 Temperature 的方法会自动转发
+// 直接使用 Weather2 的方法 Weather2.String() 来调用 Location 的方法， 也可以指定某个类型的方法 Weather2.Location.String()
+type Weather2 struct {
+	Location
+	Temperature
+}
+
+// Weather2 结构体的 String 方法 要比 Location 自动转发的方法string() 优先级高
+func (w2 Weather2) String() string {
+	return fmt.Sprintf("Location: %s, Temperature: %.2f", w2.Location.String(), w2.Temperature.Temp)
+}
+
 // 关联类型的方法
 func (l Location) String() string {
 	return fmt.Sprintf("Label: %s, X: %d, Y: %d", l.Label, l.X, l.Y)
@@ -25,6 +49,11 @@ func NewLocation(label string, x, y int) Location {
 		X:     x,
 		Y:     y,
 	}
+}
+
+// 转发
+func (w Weather) String() string {
+	return fmt.Sprintf("Location: %s, Temperature: %.2f", w.Location.String(), w.Temperature.Temp)
 }
 
 // 值传递 无效更改
