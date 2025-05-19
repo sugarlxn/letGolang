@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"text/template"
 )
 
 type myhander struct{}
@@ -15,6 +17,42 @@ type aboutHandler struct{}
 
 func (h *aboutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("about page"))
+}
+
+func upload_file(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.Write([]byte("Please use POST method to upload file"))
+		return
+	}
+
+	err := r.ParseMultipartForm(32 << 20) // 32 MB limit
+	if err != nil {
+		w.Write([]byte("Error parsing form: " + err.Error()))
+		return
+	}
+
+	files := r.MultipartForm.File["file"]
+	if len(files) == 0 {
+		w.Write([]byte("No file uploaded with name 'uploaded'"))
+		return
+	}
+
+	fileHeader := files[0]
+	file, err := fileHeader.Open()
+	if err != nil {
+		w.Write([]byte("Error opening file: " + err.Error()))
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		w.Write([]byte("Error reading file: " + err.Error()))
+		return
+	}
+
+	// 成功读取到文件内容，返回给客户端
+	w.Write([]byte("File content:\n"))
+	w.Write(data)
 }
 
 func main() {
@@ -49,10 +87,13 @@ func main() {
 		fmt.Fprintln(w, r.Form)
 	})
 
+	http.HandleFunc("/upload", upload_file)
+
 	server.ListenAndServe()
 	// http.ListenAndServe("localhost:8080", nil)
 	// http.Handle()
 	// http.DefaultServeMux
 	// http.HandleFunc()
+	template.ParseFiles()
 
 }
