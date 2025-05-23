@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"text/template"
+	"web_tutorial/controller"
 )
 
 type myhander struct{}
@@ -55,6 +57,11 @@ func upload_file(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+func tempalte_index(w http.ResponseWriter, r *http.Request) {
+	t, _ := template.ParseFiles("template.html")
+	t.Execute(w, rand.Intn(20) > 10)
+}
+
 func main() {
 
 	mh := myhander{}
@@ -89,11 +96,15 @@ func main() {
 
 	http.HandleFunc("/upload", upload_file)
 
+	http.HandleFunc("/template", tempalte_index)
+
+	controller.RegisterRoutes()
+
 	server.ListenAndServe()
 	// http.ListenAndServe("localhost:8080", nil)
 	// http.Handle()
 	// http.DefaultServeMux
 	// http.HandleFunc()
-	template.ParseFiles()
+	// template.ParseFiles()
 
 }
