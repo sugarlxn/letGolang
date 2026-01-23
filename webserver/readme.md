@@ -7,6 +7,10 @@
 - ✅ 用户管理（增删改查）
 - ✅ Todo 管理（增删改查，支持按用户过滤）
 - ✅ SQLite 数据库持久化存储
+- ✅ **bcrypt 密码加密**
+- ✅ **JWT 身份认证**
+- ✅ **输入验证（用户名、邮箱、密码强度）**
+- ✅ **结构化日志记录**
 - ✅ Swagger API 文档
 - ✅ RESTful 架构设计
 
@@ -57,11 +61,15 @@ Starting webserver on :8080...
 
 - `GET /health` - 健康检查
 
-#### 4.2 用户管理 API
+#### 4.2 认证 API（无需 Token）
+
+- `POST /register` - 注册新用户
+- `POST /login` - 用户登录，获取 JWT token
+
+#### 4.3 用户管理 API
 
 - `GET    /users` - 获取所有用户
 - `GET    /users/{id}` - 根据 id 获取单个用户
-- `POST   /users` - 新增用户
 - `PUT    /users/{id}` - 更新用户信息
 - `DELETE /users/{id}` - 删除用户
 
@@ -78,13 +86,15 @@ type User struct {
 }
 ```
 
-#### 4.3 Todo 管理 API
+#### 4.4 Todo 管理 API（需要 JWT 认证）
 
 - `GET    /todos` - 获取所有 todo（支持 `?user_id=xxx` 参数按用户过滤）
 - `GET    /todos/{id}` - 根据 id 获取单个 todo
 - `POST   /todos` - 新增 todo
 - `PUT    /todos/{id}` - 更新 todo（标题或完成状态）
 - `DELETE /todos/{id}` - 删除 todo
+
+> **注意：** 所有 Todo 相关接口需要在请求头中携带 JWT token：`Authorization: Bearer <token>`
 
 Todo 结构体定义：
 
@@ -114,10 +124,10 @@ curl http://localhost:8080/health
 
 #### 5.2 用户管理
 
-**创建用户：**
+**注册用户：**
 
 ```bash
-curl -X POST http://localhost:8080/users \
+curl -X POST http://localhost:8080/register \
   -H "Content-Type: application/json" \
   -d '{
     "username": "john_doe",
@@ -125,6 +135,32 @@ curl -X POST http://localhost:8080/users \
     "phone": "1234567890",
     "email": "john@example.com"
   }'
+```
+
+**用户登录（获取 JWT token）：**
+
+```bash
+curl -X POST http://localhost:8080/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "password": "secret123"
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": 1,
+    "username": "john_doe",
+    "phone": "1234567890",
+    "email": "john@example.com",
+    "created_at": "2026-01-23T22:00:00Z"
+  }
+}
 ```
 
 **获取所有用户：**
@@ -155,13 +191,23 @@ curl -X PUT http://localhost:8080/users/1 \
 curl -X DELETE http://localhost:8080/users/1
 ```
 
-#### 5.3 Todo 管理
+#### 5.3 Todo 管理（需要 JWT Token）
 
-**创建 Todo（需要先创建用户）：**
+**重要：** 在请求头中添加 `Authorization: Bearer <your_jwt_token>`
+
+**创建 Todo：**
 
 ```bash
+# 先获取 token
+TOKEN=$(curl -X POST http://localhost:8080/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"john_doe","password":"secret123"}' \
+  | jq -r '.token')
+
+# 使用 token 创建 todo
 curl -X POST http://localhost:8080/todos \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "user_id": 1,
     "title": "Learn Go programming"
@@ -171,19 +217,22 @@ curl -X POST http://localhost:8080/todos \
 **获取所有 Todo：**
 
 ```bash
-curl http://localhost:8080/todos
+curl http://localhost:8080/todos \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 **按用户 ID 过滤 Todo：**
 
 ```bash
-curl "http://localhost:8080/todos?user_id=1"
+curl "http://localhost:8080/todos?user_id=1" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 **获取单个 Todo：**
 
 ```bash
-curl http://localhost:8080/todos/1
+curl http://localhost:8080/todos/1 \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 **更新 Todo：**
@@ -191,6 +240,7 @@ curl http://localhost:8080/todos/1
 ```bash
 curl -X PUT http://localhost:8080/todos/1 \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "title": "Learn Go and build APIs",
     "completed": true
@@ -200,8 +250,10 @@ curl -X PUT http://localhost:8080/todos/1 \
 **删除 Todo：**
 
 ```bash
-curl -X DELETE http://localhost:8080/todos/1
+curl -X DELETE http://localhost:8080/todos/1 \
+  -H "Authorization: Bearer $TOKEN"
 ```
+
 
 ### 6. 数据库说明
 
@@ -312,22 +364,57 @@ go test -v
 
 ### 10. 技术栈
 
-- **编程语言：** Go 1.21+
+- **编程语言：** Go 1.24+
 - **Web 框架：** 标准库 `net/http`
 - **数据库：** SQLite3
 - **数据库驱动：** `github.com/mattn/go-sqlite3`
+- **密码加密：** bcrypt (`golang.org/x/crypto/bcrypt`)
+- **身份认证：** JWT (`github.com/golang-jwt/jwt/v5`)
 - **API 文档：** Swagger/OpenAPI
 - **文档生成：** `github.com/swaggo/swag`
 
-### 11. 注意事项
+### 11. 安全特性
 
-1. **密码安全：** 当前示例中密码以明文存储，生产环境请使用 bcrypt 等加密方式
-2. **认证授权：** 当前未实现用户认证，生产环境建议使用 JWT 或 Session
-3. **输入验证：** 建议添加更严格的输入验证和数据校验
-4. **错误处理：** 可以进一步完善错误处理和日志记录
-5. **并发安全：** SQLite 在高并发场景下可能存在性能瓶颈，生产环境建议使用 PostgreSQL/MySQL
+#### 11.1 密码安全
 
-### 12. 扩展建议
+- 使用 bcrypt 算法对密码进行加密存储
+- 密码至少 6 个字符
+- 登录时验证加密密码
+- API 响应中不返回密码哈希
+
+#### 11.2 JWT 认证
+
+- 登录成功后返回 JWT token
+- Token 有效期 24 小时
+- Todo 相关接口需要 Bearer Token 认证
+- Token 包含用户 ID 和用户名信息
+
+#### 11.3 输入验证
+
+- **用户名：** 3-20 个字符，只允许字母、数字和下划线
+- **邮箱：** 标准邮箱格式验证
+- **密码：** 至少 6 个字符
+
+#### 11.4 环境变量
+
+支持通过环境变量配置 JWT 密钥：
+
+```bash
+export JWT_SECRET="your-super-secret-key"
+./webserver
+```
+
+### 12. 注意事项
+
+1. ✅ **密码安全：** 已使用 bcrypt 加密
+2. ✅ **认证授权：** 已实现 JWT 认证
+3. ✅ **输入验证：** 已添加用户名、邮箱、密码验证
+4. ✅ **错误处理：** 已完善错误日志记录
+5. ⚠️ **并发安全：** SQLite 在高并发场景下可能存在性能瓶颈，生产环境建议使用 PostgreSQL/MySQL
+6. ⚠️ **HTTPS：** 生产环境应使用 HTTPS
+7. ⚠️ **CORS：** 如需前端调用，请添加 CORS 中间件
+
+### 13. 扩展建议
 
 ```json
 {"id":4,"title":"Read Go doc","completed":false}
@@ -437,6 +524,7 @@ func errorResponse(w http.ResponseWriter, status int, msg string)
 
 ## 更新日志
 
+- v3.0 - 添加 bcrypt 密码加密、JWT 认证、输入验证、日志记录
 - v2.0 - 添加 SQLite 数据库持久化，用户与 Todo 关联
 - v1.0 - 初始版本，内存存储
 

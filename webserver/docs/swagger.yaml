@@ -3,6 +3,20 @@ consumes:
 - application/json
 - application/json
 definitions:
+  main.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  main.LoginResponse:
+    properties:
+      token:
+        type: string
+      user:
+        $ref: '#/definitions/main.User'
+    type: object
   main.Todo:
     description: Todo 代表一个简单的待办事项
     properties:
@@ -56,7 +70,7 @@ info:
     url: http://www.apache.org/licenses/LICENSE-2.0.html
   termsOfService: http://swagger.io/terms/
   title: User Management API
-  version: "1.0"
+  version: "2.0"
 paths:
   /health:
     get:
@@ -75,6 +89,46 @@ paths:
       summary: Health check
       tags:
       - health
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Login with username and password to get JWT token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: login
+        required: true
+        schema:
+          $ref: '#/definitions/main.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: User login
+      tags:
+      - auth
   /todos:
     get:
       consumes:
@@ -433,4 +487,10 @@ paths:
 produces:
 - application/json
 - application/json
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

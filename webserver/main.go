@@ -3,12 +3,18 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -18,8 +24,8 @@ import (
 )
 
 // @title User Management API
-// @version 1.0
-// @description This is a user management and todo list server with SQLite database.
+// @version 2.0
+// @description This is a user management and todo list server with SQLite database, JWT authentication, and bcrypt password hashing.
 // @termsOfService http://swagger.io/terms/
 
 // @contact.name API Support
@@ -31,6 +37,11 @@ import (
 
 // @host localhost:8080
 // @BasePath /
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 
 // Todo 代表一个简单的待办事项
 // @Description Todo 代表一个简单的待办事项
@@ -71,6 +82,42 @@ type Image struct {
 // Database 连接
 var db *sql.DB
 
+// JWT 密钥（生产环境应从环境变量读取）
+var jwtSecret = []byte(getEnv("JWT_SECRET", "your-secret-key-change-in-production"))
+
+// 日志记录器
+var (
+	infoLog  *log.Logger
+	errorLog *log.Logger
+)
+
+// getEnv 获取环境变量，如果不存在则返回默认值
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// JWT Claims
+type Claims struct {
+	UserID   int64  `json:"user_id"`
+	Username string `json:"username"`
+	jwt.RegisteredClaims
+}
+
+// LoginRequest 登录请求
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// LoginResponse 登录响应
+type LoginResponse struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
+}
+
 // writeJSON 是一个小工具函数，用于统一 JSON 返回
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -82,7 +129,111 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 
 // errorResponse 用于返回错误信息
 func errorResponse(w http.ResponseWriter, status int, msg string) {
+	errorLog.Printf("Error: %s (status: %d)", msg, status)
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// hashPassword 使用 bcrypt 加密密码
+func hashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(bytes), err
+}
+
+// checkPasswordHash 验证密码
+func checkPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
+
+// generateJWT 生成 JWT token
+func generateJWT(userID int64, username string) (string, error) {
+	claims := Claims{
+		UserID:   userID,
+		Username: username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(jwtSecret)
+}
+
+// validateJWT 验证 JWT token
+func validateJWT(tokenString string) (*Claims, error) {
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jwtSecret, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	return claims, nil
+}
+
+// authMiddleware JWT 认证中间件
+func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			errorResponse(w, http.StatusUnauthorized, "authorization header required")
+			return
+		}
+
+		// 支持 "Bearer <token>" 格式
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader {
+			errorResponse(w, http.StatusUnauthorized, "invalid authorization format")
+			return
+		}
+
+		claims, err := validateJWT(tokenString)
+		if err != nil {
+			errorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+
+		// 将用户信息附加到请求头，供 handler 使用
+		r.Header.Set("X-User-ID", fmt.Sprintf("%d", claims.UserID))
+		r.Header.Set("X-Username", claims.Username)
+
+		infoLog.Printf("Authenticated user: %s (ID: %d)", claims.Username, claims.UserID)
+		next(w, r)
+	}
+}
+
+// validateEmail 验证邮箱格式
+func validateEmail(email string) bool {
+	if email == "" {
+		return true // 邮箱可选
+	}
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	return emailRegex.MatchString(email)
+}
+
+// validateUsername 验证用户名格式
+func validateUsername(username string) bool {
+	if len(username) < 3 || len(username) > 20 {
+		return false
+	}
+	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+	return usernameRegex.MatchString(username)
+}
+
+// validatePassword 验证密码强度
+func validatePassword(password string) bool {
+	return len(password) >= 6
 }
 
 // 初始化数据库
@@ -136,8 +287,13 @@ func initDB() {
 }
 
 func init() {
+	// 初始化日志
+	infoLog = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLog = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+
 	initDB()
 	rand.Seed(time.Now().UnixNano())
+	infoLog.Println("Server initialized successfully")
 }
 
 // handleHealth 简单健康检查
@@ -534,19 +690,44 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 输入验证
 	if input.Username == "" || input.Password == "" {
 		errorResponse(w, http.StatusBadRequest, "username and password are required")
 		return
 	}
 
+	if !validateUsername(input.Username) {
+		errorResponse(w, http.StatusBadRequest, "username must be 3-20 characters and contain only letters, numbers, and underscores")
+		return
+	}
+
+	if !validatePassword(input.Password) {
+		errorResponse(w, http.StatusBadRequest, "password must be at least 6 characters")
+		return
+	}
+
+	if !validateEmail(input.Email) {
+		errorResponse(w, http.StatusBadRequest, "invalid email format")
+		return
+	}
+
+	// 加密密码
+	hashedPassword, err := hashPassword(input.Password)
+	if err != nil {
+		errorLog.Printf("Failed to hash password: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "failed to process password")
+		return
+	}
+
 	result, err := db.Exec(
 		"INSERT INTO users (username, password, phone, email) VALUES (?, ?, ?, ?)",
-		input.Username, input.Password, input.Phone, input.Email)
+		input.Username, hashedPassword, input.Phone, input.Email)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			errorResponse(w, http.StatusBadRequest, "username already exists")
 		} else {
+			errorLog.Printf("Database insert failed: %v", err)
 			errorResponse(w, http.StatusInternalServerError, "database insert failed")
 		}
 		return
@@ -559,10 +740,14 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		&user.ID, &user.Username, &user.Password, &user.Phone, &user.Email, &user.CreatedAt)
 
 	if err != nil {
+		errorLog.Printf("Failed to retrieve created user: %v", err)
 		errorResponse(w, http.StatusInternalServerError, "failed to retrieve created user")
 		return
 	}
 
+	// 不返回密码哈希
+	user.Password = ""
+	infoLog.Printf("User created: %s (ID: %d)", user.Username, user.ID)
 	writeJSON(w, http.StatusCreated, user)
 }
 
@@ -728,6 +913,69 @@ func handleResetPassword(w http.ResponseWriter, _ *http.Request) {
 	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
 }
 
+// handleLogin 处理用户登录
+// @Summary User login
+// @Description Login with username and password to get JWT token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param login body LoginRequest true "Login credentials"
+// @Success 200 {object} LoginResponse
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /login [post]
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	var input LoginRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if input.Username == "" || input.Password == "" {
+		errorResponse(w, http.StatusBadRequest, "username and password are required")
+		return
+	}
+
+	// 查询用户
+	var user User
+	err := db.QueryRow("SELECT id, username, password, phone, email, created_at FROM users WHERE username = ?", input.Username).Scan(
+		&user.ID, &user.Username, &user.Password, &user.Phone, &user.Email, &user.CreatedAt)
+
+	if err == sql.ErrNoRows {
+		errorResponse(w, http.StatusUnauthorized, "invalid username or password")
+		return
+	} else if err != nil {
+		errorLog.Printf("Database query failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database query failed")
+		return
+	}
+
+	// 验证密码
+	if !checkPasswordHash(input.Password, user.Password) {
+		errorResponse(w, http.StatusUnauthorized, "invalid username or password")
+		return
+	}
+
+	// 生成 JWT token
+	token, err := generateJWT(user.ID, user.Username)
+	if err != nil {
+		errorLog.Printf("Failed to generate JWT: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "failed to generate token")
+		return
+	}
+
+	// 不返回密码
+	user.Password = ""
+	infoLog.Printf("User logged in: %s (ID: %d)", user.Username, user.ID)
+
+	writeJSON(w, http.StatusOK, LoginResponse{
+		Token: token,
+		User:  user,
+	})
+}
+
 func main() {
 	mux := http.NewServeMux()
 
@@ -741,34 +989,64 @@ func main() {
 	// @Router /health [get]
 	mux.HandleFunc("/health", handleHealth)
 
-	// Todo 管理路由
-	// @Summary Todo API
-	// @Description RESTful Todo API endpoints
-	// @Tags todos
-	mux.HandleFunc("/todos", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handleListTodos(w, r)
-		case http.MethodPost:
-			handleCreateTodo(w, r)
-		default:
-			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
+	// 登录路由（不需要认证）
+	// @Summary Login API
+	// @Description User login endpoint
+	// @Tags auth
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
 			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
 		}
+		handleLogin(w, r)
+	})
+
+	// 注册路由（不需要认证）
+	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		handleCreateUser(w, r)
+	})
+
+	// Todo 管理路由（需要认证）
+	// @Summary Todo API
+	// @Description RESTful Todo API endpoints (requires authentication)
+	// @Tags todos
+	// @Security BearerAuth
+	mux.HandleFunc("/todos", func(w http.ResponseWriter, r *http.Request) {
+		// 需要认证
+		authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				handleListTodos(w, r)
+			case http.MethodPost:
+				handleCreateTodo(w, r)
+			default:
+				w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
+				errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+		})(w, r)
 	})
 
 	mux.HandleFunc("/todos/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handleGetTodo(w, r)
-		case http.MethodPut:
-			handleUpdateTodo(w, r)
-		case http.MethodDelete:
-			handleDeleteTodo(w, r)
-		default:
-			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
-			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
-		}
+		// 需要认证
+		authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				handleGetTodo(w, r)
+			case http.MethodPut:
+				handleUpdateTodo(w, r)
+			case http.MethodDelete:
+				handleDeleteTodo(w, r)
+			default:
+				w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
+				errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+		})(w, r)
 	})
 
 	// 用户管理路由

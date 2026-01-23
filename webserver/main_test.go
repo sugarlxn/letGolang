@@ -1,26 +1,111 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
-func resetState() {
-	mu.Lock()
-	defer mu.Unlock()
-	idSeed = 3
-	todos = []*Todo{
-		{ID: 1, Title: "Learn Go", Completed: false},
-		{ID: 2, Title: "Build a web server", Completed: false},
-		{ID: 3, Title: "Write REST API", Completed: true},
+func setupTestDB(t *testing.T) {
+	t.Helper()
+
+	jwtSecret = []byte("test-secret")
+	infoLog = log.New(io.Discard, "", 0)
+	errorLog = log.New(io.Discard, "", 0)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	var err error
+	db, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+
+	createTables := []string{
+		`CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            phone TEXT,
+            email TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );`,
+		`CREATE TABLE IF NOT EXISTS images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            image_data BLOB NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );`,
+		`CREATE TABLE IF NOT EXISTS todos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            completed BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );`,
+	}
+
+	for _, stmt := range createTables {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("failed to create table: %v", err)
+		}
 	}
 }
 
+func createTestUser(t *testing.T, username string) User {
+	t.Helper()
+
+	hashed, err := hashPassword("password123")
+	if err != nil {
+		t.Fatalf("failed to hash password: %v", err)
+	}
+
+	res, err := db.Exec(
+		"INSERT INTO users (username, password, phone, email) VALUES (?, ?, ?, ?)",
+		username, hashed, "1234567890", fmt.Sprintf("%s@example.com", username),
+	)
+	if err != nil {
+		t.Fatalf("failed to insert user: %v", err)
+	}
+
+	id, _ := res.LastInsertId()
+	return User{ID: id, Username: username, Password: "", Phone: "1234567890", Email: fmt.Sprintf("%s@example.com", username)}
+}
+
+func insertTodo(t *testing.T, userID int64, title string, completed bool) int64 {
+	t.Helper()
+
+	res, err := db.Exec("INSERT INTO todos (user_id, title, completed) VALUES (?, ?, ?)", userID, title, completed)
+	if err != nil {
+		t.Fatalf("failed to insert todo: %v", err)
+	}
+	id, _ := res.LastInsertId()
+	return id
+}
+
+func bearerFor(t *testing.T, user User) string {
+	t.Helper()
+	token, err := generateJWT(user.ID, user.Username)
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
+	return "Bearer " + token
+}
+
 func TestHandleHealthOK(t *testing.T) {
-	resetState()
+	setupTestDB(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
@@ -40,93 +125,98 @@ func TestHandleHealthOK(t *testing.T) {
 	}
 }
 
-func TestHandleListTodosOK(t *testing.T) {
-	resetState()
+func TestHandleCreateUser(t *testing.T) {
+	setupTestDB(t)
+
+	body := strings.NewReader(`{"username":"alice","password":"secret123","email":"a@example.com"}`)
+	req := httptest.NewRequest(http.MethodPost, "/users", body)
+	rr := httptest.NewRecorder()
+
+	handleCreateUser(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rr.Code)
+	}
+
+	var user User
+	if err := json.Unmarshal(rr.Body.Bytes(), &user); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if user.Username != "alice" {
+		t.Fatalf("unexpected username %q", user.Username)
+	}
+	if user.Password != "" {
+		t.Fatalf("password should not be returned in response")
+	}
+
+	var storedPassword string
+	if err := db.QueryRow("SELECT password FROM users WHERE id = ?", user.ID).Scan(&storedPassword); err != nil {
+		t.Fatalf("failed to load stored user: %v", err)
+	}
+	if storedPassword == "" || storedPassword == "secret123" {
+		t.Fatalf("password should be stored as hashed value")
+	}
+}
+
+func TestHandleLogin(t *testing.T) {
+	setupTestDB(t)
+	user := createTestUser(t, "bob")
+
+	body := strings.NewReader(`{"username":"bob","password":"password123"}`)
+	req := httptest.NewRequest(http.MethodPost, "/login", body)
+	rr := httptest.NewRecorder()
+
+	handleLogin(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var resp LoginResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Token == "" {
+		t.Fatalf("expected a JWT token in response")
+	}
+	if resp.User.Password != "" {
+		t.Fatalf("password should not be returned in login response")
+	}
+
+	claims, err := validateJWT(resp.Token)
+	if err != nil {
+		t.Fatalf("token validation failed: %v", err)
+	}
+	if claims.UserID != user.ID || claims.Username != user.Username {
+		t.Fatalf("claims mismatch: got user_id=%d username=%s", claims.UserID, claims.Username)
+	}
+}
+
+func TestAuthMiddlewareRejectsMissingHeader(t *testing.T) {
+	setupTestDB(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/todos", nil)
 	rr := httptest.NewRecorder()
 
-	handleListTodos(rr, req)
+	authMiddleware(handleListTodos)(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
-	}
-
-	var list []*Todo
-	if err := json.Unmarshal(rr.Body.Bytes(), &list); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if len(list) != 3 {
-		t.Fatalf("expected 3 todos, got %d", len(list))
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rr.Code)
 	}
 }
 
-func TestHandleListTodosMethodNotAllowed(t *testing.T) {
-	resetState()
+func TestHandleCreateTodoWithAuth(t *testing.T) {
+	setupTestDB(t)
+	user := createTestUser(t, "carol")
 
-	req := httptest.NewRequest(http.MethodPost, "/todos", nil)
-	rr := httptest.NewRecorder()
-
-	handleListTodos(rr, req)
-
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected status 405, got %d", rr.Code)
-	}
-	if allow := rr.Header().Get("Allow"); allow != http.MethodGet {
-		t.Fatalf("expected Allow header %q, got %q", http.MethodGet, allow)
-	}
-}
-
-func TestHandleGetTodoFound(t *testing.T) {
-	resetState()
-
-	req := httptest.NewRequest(http.MethodGet, "/todos/2", nil)
-	rr := httptest.NewRecorder()
-
-	handleGetTodo(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
-	}
-
-	var todo Todo
-	if err := json.Unmarshal(rr.Body.Bytes(), &todo); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if todo.ID != 2 {
-		t.Fatalf("expected todo ID 2, got %d", todo.ID)
-	}
-}
-
-func TestHandleGetTodoNotFound(t *testing.T) {
-	resetState()
-
-	req := httptest.NewRequest(http.MethodGet, "/todos/99", nil)
-	rr := httptest.NewRecorder()
-
-	handleGetTodo(rr, req)
-
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("expected status 404, got %d", rr.Code)
-	}
-
-	var payload map[string]string
-	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if payload["error"] != "todo not found" {
-		t.Fatalf("expected error 'todo not found', got %q", payload["error"])
-	}
-}
-
-func TestHandleCreateTodoCreatesNewItem(t *testing.T) {
-	resetState()
-
-	body := strings.NewReader(`{"title":"Ship project"}`)
+	body := strings.NewReader(fmt.Sprintf(`{"user_id":%d,"title":"Ship project"}`, user.ID))
 	req := httptest.NewRequest(http.MethodPost, "/todos", body)
+	req.Header.Set("Authorization", bearerFor(t, user))
 	rr := httptest.NewRecorder()
 
-	handleCreateTodo(rr, req)
+	authMiddleware(handleCreateTodo)(rr, req)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected status 201, got %d", rr.Code)
@@ -136,89 +226,108 @@ func TestHandleCreateTodoCreatesNewItem(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &todo); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if todo.ID != 4 {
-		t.Fatalf("expected new todo ID 4, got %d", todo.ID)
-	}
-	if todo.Title != "Ship project" {
-		t.Fatalf("unexpected todo title %q", todo.Title)
-	}
-	if todo.Completed {
-		t.Fatal("expected new todo to be incomplete")
+
+	if todo.Title != "Ship project" || todo.UserID != user.ID || todo.Completed {
+		t.Fatalf("unexpected todo response: %+v", todo)
 	}
 
-	mu.RLock()
-	if len(todos) != 4 {
-		mu.RUnlock()
-		t.Fatalf("expected 4 todos in memory, got %d", len(todos))
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM todos WHERE id = ?", todo.ID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("todo not persisted")
 	}
-	mu.RUnlock()
 }
 
-func TestHandleUpdateTodoUpdatesFields(t *testing.T) {
-	resetState()
+func TestHandleListTodosFiltersByUser(t *testing.T) {
+	setupTestDB(t)
+	userA := createTestUser(t, "dave")
+	userB := createTestUser(t, "erin")
 
-	body := strings.NewReader(`{"title":"Updated", "completed":true}`)
-	req := httptest.NewRequest(http.MethodPut, "/todos/2", body)
+	insertTodo(t, userA.ID, "A1", false)
+	insertTodo(t, userA.ID, "A2", true)
+	insertTodo(t, userB.ID, "B1", false)
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/todos?user_id=%d", userA.ID), nil)
+	req.Header.Set("Authorization", bearerFor(t, userA))
 	rr := httptest.NewRecorder()
 
-	handleUpdateTodo(rr, req)
+	authMiddleware(handleListTodos)(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 
-	var updatedResp Todo
-	if err := json.Unmarshal(rr.Body.Bytes(), &updatedResp); err != nil {
+	var todos []Todo
+	if err := json.Unmarshal(rr.Body.Bytes(), &todos); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if updatedResp.ID != 2 {
-		t.Fatalf("expected todo ID 2, got %d", updatedResp.ID)
+	if len(todos) != 2 {
+		t.Fatalf("expected 2 todos for user A, got %d", len(todos))
 	}
-
-	mu.RLock()
-	var stored Todo
-	for _, t := range todos {
-		if t.ID == 2 {
-			stored = *t
-			break
+	for _, todo := range todos {
+		if todo.UserID != userA.ID {
+			t.Fatalf("expected todos only for user A, got user_id=%d", todo.UserID)
 		}
-	}
-	mu.RUnlock()
-
-	if stored.ID == 0 {
-		t.Fatal("todo with ID 2 not found after update")
-	}
-	if stored.Title != "Updated" {
-		t.Fatalf("expected title 'Updated', got %q", stored.Title)
-	}
-	if !stored.Completed {
-		t.Fatal("expected todo to be marked completed")
 	}
 }
 
-func TestHandleDeleteTodoRemovesItem(t *testing.T) {
-	resetState()
+func TestHandleUpdateTodo(t *testing.T) {
+	setupTestDB(t)
+	user := createTestUser(t, "frank")
+	todoID := insertTodo(t, user.ID, "Initial", false)
 
-	req := httptest.NewRequest(http.MethodDelete, "/todos/2", nil)
+	body := strings.NewReader(`{"title":"Updated","completed":true}`)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/todos/%d", todoID), body)
+	req.Header.Set("Authorization", bearerFor(t, user))
 	rr := httptest.NewRecorder()
 
-	handleDeleteTodo(rr, req)
+	authMiddleware(handleUpdateTodo)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var todo Todo
+	if err := json.Unmarshal(rr.Body.Bytes(), &todo); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if todo.ID != todoID || todo.Title != "Updated" || !todo.Completed {
+		t.Fatalf("unexpected todo response: %+v", todo)
+	}
+
+	var stored Todo
+	if err := db.QueryRow("SELECT id, user_id, title, completed, created_at FROM todos WHERE id = ?", todoID).
+		Scan(&stored.ID, &stored.UserID, &stored.Title, &stored.Completed, &stored.CreatedAt); err != nil {
+		t.Fatalf("failed to load todo from db: %v", err)
+	}
+	if stored.Title != "Updated" || !stored.Completed {
+		t.Fatalf("todo not updated in db: %+v", stored)
+	}
+}
+
+func TestHandleDeleteTodo(t *testing.T) {
+	setupTestDB(t)
+	user := createTestUser(t, "gina")
+	todoID := insertTodo(t, user.ID, "Disposable", false)
+
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/todos/%d", todoID), nil)
+	req.Header.Set("Authorization", bearerFor(t, user))
+	rr := httptest.NewRecorder()
+
+	authMiddleware(handleDeleteTodo)(rr, req)
 
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected status 204, got %d", rr.Code)
 	}
 	if rr.Body.Len() != 0 {
-		t.Fatal("expected empty response body")
+		t.Fatalf("expected empty response body")
 	}
 
-	mu.RLock()
-	defer mu.RUnlock()
-	if len(todos) != 2 {
-		t.Fatalf("expected 2 todos remaining, got %d", len(todos))
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM todos WHERE id = ?", todoID).Scan(&count); err != nil {
+		t.Fatalf("failed to query todo: %v", err)
 	}
-	for _, todo := range todos {
-		if todo.ID == 2 {
-			t.Fatal("todo ID 2 still present after deletion")
-		}
+	if count != 0 {
+		t.Fatalf("todo not deleted")
 	}
 }
