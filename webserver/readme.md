@@ -1,10 +1,18 @@
-## 使用 Go 在本地启动一个简单的 RESTful Web Server
+## 使用 Go 在本地启动一个 RESTful Web Server
 
-本目录包含一个使用 Go 标准库 net/http 实现的示例 Web Server，提供基于内存的 Todo REST API，适合作为学习和扩展自己后端服务的模板。
+本目录包含一个使用 Go 标准库 net/http 和 SQLite 数据库实现的示例 Web Server，提供 Todo 和 User 管理的 REST API，适合作为学习和扩展自己后端服务的模板。
+
+### 功能特性
+
+- ✅ 用户管理（增删改查）
+- ✅ Todo 管理（增删改查，支持按用户过滤）
+- ✅ SQLite 数据库持久化存储
+- ✅ Swagger API 文档
+- ✅ RESTful 架构设计
 
 ### 1. 运行环境准备
 
-- 已安装 Go（建议 Go 1.22+，至少 1.21）
+- 已安装 Go（建议 Go 1.21+）
 - 当前工作目录为项目根目录：`/home/lxn/letGolang`
 
 进入 webserver 目录：
@@ -13,22 +21,29 @@
 cd webserver
 ```
 
-### 2. 启动 Web Server
+### 2. 安装依赖
+
+```bash
+go mod download
+```
+
+### 3. 启动 Web Server
 
 在 webserver 目录下执行：
 
 ```bash
 # 直接运行
-go run .
+go run main.go
 
 # 或先构建再运行
-go build -o webserver
+go build -o webserver main.go
 ./webserver
 ```
 
 默认监听地址为：
 
-- http://localhost:8080
+- Web Server: http://localhost:8080
+- Swagger 文档: http://localhost:8080/docs/
 
 成功启动后，终端会打印类似信息：
 
@@ -36,32 +51,56 @@ go build -o webserver
 Starting webserver on :8080...
 ```
 
-### 3. API 概览
+### 4. API 概览
 
-当前示例实现了一个简单的 Todo REST API，使用内存存储：
+#### 4.1 健康检查
 
-- `GET    /health`              健康检查
-- `GET    /todos`               获取所有 todo
-- `GET    /todos/{id}`          根据 id 获取单个 todo
-- `POST   /todos`               新增 todo
-- `PUT    /todos/{id}`          更新 todo（标题或完成状态）
-- `DELETE /todos/{id}`          删除 todo
+- `GET /health` - 健康检查
 
-Todo 结构体定义如下：
+#### 4.2 用户管理 API
+
+- `GET    /users` - 获取所有用户
+- `GET    /users/{id}` - 根据 id 获取单个用户
+- `POST   /users` - 新增用户
+- `PUT    /users/{id}` - 更新用户信息
+- `DELETE /users/{id}` - 删除用户
+
+User 结构体定义：
 
 ```go
-type Todo struct {
-		ID        int64  `json:"id"`
-		Title     string `json:"title"`
-		Completed bool   `json:"completed"`
+type User struct {
+    ID        int64     `json:"id"`
+    Username  string    `json:"username"`
+    Password  string    `json:"password"`
+    Phone     string    `json:"phone"`
+    Email     string    `json:"email"`
+    CreatedAt time.Time `json:"created_at"`
 }
 ```
 
-> 注意：所有数据保存在内存中，重启服务后会丢失，仅用于演示 REST 风格的 API。
+#### 4.3 Todo 管理 API
 
-### 4. 常用请求示例（使用 curl）
+- `GET    /todos` - 获取所有 todo（支持 `?user_id=xxx` 参数按用户过滤）
+- `GET    /todos/{id}` - 根据 id 获取单个 todo
+- `POST   /todos` - 新增 todo
+- `PUT    /todos/{id}` - 更新 todo（标题或完成状态）
+- `DELETE /todos/{id}` - 删除 todo
 
-#### 4.1 健康检查
+Todo 结构体定义：
+
+```go
+type Todo struct {
+    ID        int64     `json:"id"`
+    UserID    int64     `json:"user_id"`
+    Title     string    `json:"title"`
+    Completed bool      `json:"completed"`
+    CreatedAt time.Time `json:"created_at"`
+}
+```
+
+### 5. 常用请求示例（使用 curl）
+
+#### 5.1 健康检查
 
 ```bash
 curl http://localhost:8080/health
@@ -73,31 +112,222 @@ curl http://localhost:8080/health
 {"status":"ok"}
 ```
 
-#### 4.2 获取所有 Todo（GET /todos）
+#### 5.2 用户管理
+
+**创建用户：**
+
+```bash
+curl -X POST http://localhost:8080/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "password": "secret123",
+    "phone": "1234567890",
+    "email": "john@example.com"
+  }'
+```
+
+**获取所有用户：**
+
+```bash
+curl http://localhost:8080/users
+```
+
+**获取单个用户：**
+
+```bash
+curl http://localhost:8080/users/1
+```
+
+**更新用户：**
+
+```bash
+curl -X PUT http://localhost:8080/users/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newemail@example.com"
+  }'
+```
+
+**删除用户：**
+
+```bash
+curl -X DELETE http://localhost:8080/users/1
+```
+
+#### 5.3 Todo 管理
+
+**创建 Todo（需要先创建用户）：**
+
+```bash
+curl -X POST http://localhost:8080/todos \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": 1,
+    "title": "Learn Go programming"
+  }'
+```
+
+**获取所有 Todo：**
 
 ```bash
 curl http://localhost:8080/todos
 ```
 
-返回示例：
-
-```json
-[
-	{"id":1,"title":"Learn Go","completed":false},
-	{"id":2,"title":"Build a web server","completed":false},
-	{"id":3,"title":"Write REST API","completed":true}
-]
-```
-
-#### 4.3 新增 Todo（POST /todos）
+**按用户 ID 过滤 Todo：**
 
 ```bash
-curl -X POST http://localhost:8080/todos \
-	-H "Content-Type: application/json" \
-	-d '{"title": "Read Go doc"}'
+curl "http://localhost:8080/todos?user_id=1"
 ```
 
-可能的返回：
+**获取单个 Todo：**
+
+```bash
+curl http://localhost:8080/todos/1
+```
+
+**更新 Todo：**
+
+```bash
+curl -X PUT http://localhost:8080/todos/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Learn Go and build APIs",
+    "completed": true
+  }'
+```
+
+**删除 Todo：**
+
+```bash
+curl -X DELETE http://localhost:8080/todos/1
+```
+
+### 6. 数据库说明
+
+本项目使用 SQLite 数据库进行持久化存储，数据库文件为 `test.db`。
+
+#### 6.1 数据库表结构
+
+**users 表：**
+
+```sql
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    phone TEXT,
+    email TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**todos 表：**
+
+```sql
+CREATE TABLE todos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    completed BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+```
+
+**images 表（预留）：**
+
+```sql
+CREATE TABLE images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    image_data BLOB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+```
+
+#### 6.2 数据库操作
+
+查看数据库内容：
+
+```bash
+# 进入 SQLite 命令行
+sqlite3 test.db
+
+# 查看所有表
+.tables
+
+# 查看用户
+SELECT * FROM users;
+
+# 查看 todos
+SELECT * FROM todos;
+
+# 退出
+.quit
+```
+
+### 7. Swagger API 文档
+
+本项目集成了 Swagger/OpenAPI 文档，可以通过浏览器访问：
+
+**访问地址：** http://localhost:8080/docs/
+
+在 Swagger UI 中可以：
+- 查看所有 API 接口
+- 查看请求/响应参数
+- 在线测试 API
+
+#### 7.1 更新 Swagger 文档
+
+修改代码后需要重新生成 Swagger 文档：
+
+```bash
+swag init
+```
+
+### 8. 项目结构
+
+```
+webserver/
+├── main.go           # 主程序文件
+├── main_test.go      # 测试文件
+├── go.mod            # Go 模块定义
+├── readme.md         # 项目文档
+├── test.db           # SQLite 数据库文件
+└── docs/             # Swagger 文档目录
+    ├── docs.go
+    ├── swagger.json
+    └── swagger.yaml
+```
+
+### 9. 测试
+
+运行单元测试：
+
+```bash
+go test -v
+```
+
+### 10. 技术栈
+
+- **编程语言：** Go 1.21+
+- **Web 框架：** 标准库 `net/http`
+- **数据库：** SQLite3
+- **数据库驱动：** `github.com/mattn/go-sqlite3`
+- **API 文档：** Swagger/OpenAPI
+- **文档生成：** `github.com/swaggo/swag`
+
+### 11. 注意事项
+
+1. **密码安全：** 当前示例中密码以明文存储，生产环境请使用 bcrypt 等加密方式
+2. **认证授权：** 当前未实现用户认证，生产环境建议使用 JWT 或 Session
+3. **输入验证：** 建议添加更严格的输入验证和数据校验
+4. **错误处理：** 可以进一步完善错误处理和日志记录
+5. **并发安全：** SQLite 在高并发场景下可能存在性能瓶颈，生产环境建议使用 PostgreSQL/MySQL
+
+### 12. 扩展建议
 
 ```json
 {"id":4,"title":"Read Go doc","completed":false}
@@ -199,17 +429,14 @@ func errorResponse(w http.ResponseWriter, status int, msg string)
 
 它们帮助你统一设置 `Content-Type`、状态码以及错误返回格式。
 
-### 6. 常见问题
-
-1. 端口被占用
-	 - 修改 main.go 中的 `addr := ":8080"`，例如改为 `":9090"`。
-
-2. 无法使用 /todos/{id} 路由
-	 - 请确认 Go 版本是否为 1.22+，或参考 5.2 节使用第三方路由库。
-
-3. 数据为何重启后丢失？
-	 - 示例使用内存切片存储数据，重启进程后内存会重置。若需要持久化，请替换为数据库（例如 MySQL、PostgreSQL、SQLite 等）。
-
 ---
 
-你可以在此基础上继续扩展认证、数据库访问、中间件（日志、跨域等），逐步搭建完整的后端 REST API 服务。
+## 作者
+
+学习项目 - Go Web Server 示例
+
+## 更新日志
+
+- v2.0 - 添加 SQLite 数据库持久化，用户与 Todo 关联
+- v1.0 - 初始版本，内存存储
+

@@ -1,6 +1,7 @@
 basePath: /
 consumes:
 - application/json
+- application/json
 definitions:
   main.Todo:
     description: Todo 代表一个简单的待办事项
@@ -8,11 +9,39 @@ definitions:
       completed:
         description: '@Description Todo completion status'
         type: boolean
+      created_at:
+        description: '@Description Todo creation time'
+        type: string
       id:
         description: '@Description Todo ID'
         type: integer
       title:
         description: '@Description Todo title'
+        type: string
+      user_id:
+        description: '@Description User ID who owns this todo'
+        type: integer
+    type: object
+  main.User:
+    description: User 用户结构体
+    properties:
+      created_at:
+        description: '@Description User creation time'
+        type: string
+      email:
+        description: '@Description User email'
+        type: string
+      id:
+        description: '@Description User ID'
+        type: integer
+      password:
+        description: '@Description User password'
+        type: string
+      phone:
+        description: '@Description User phone'
+        type: string
+      username:
+        description: '@Description User username'
         type: string
     type: object
 host: localhost:8080
@@ -21,12 +50,12 @@ info:
     email: support@swagger.io
     name: API Support
     url: http://www.swagger.io/support
-  description: Todo completion status
+  description: Image creation time
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
   termsOfService: http://swagger.io/terms/
-  title: Todo API
+  title: User Management API
   version: "1.0"
 paths:
   /health:
@@ -50,7 +79,12 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get all todos
+      description: Get all todos from database
+      parameters:
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -60,6 +94,12 @@ paths:
             items:
               $ref: '#/definitions/main.Todo'
             type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       summary: List all todos
       tags:
       - todos
@@ -83,6 +123,12 @@ paths:
             $ref: '#/definitions/main.Todo'
         "400":
           description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
           schema:
             additionalProperties:
               type: string
@@ -118,6 +164,12 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       summary: Delete a todo
       tags:
       - todos
@@ -146,6 +198,12 @@ paths:
             type: object
         "404":
           description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
           schema:
             additionalProperties:
               type: string
@@ -188,9 +246,191 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       summary: Update a todo
       tags:
       - todos
+  /users:
+    get:
+      consumes:
+      - application/json
+      description: Get all users from database
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/main.User'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List all users
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Create a new user in database
+      parameters:
+      - description: User object
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/main.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.User'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new user
+      tags:
+      - users
+  /users/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an existing user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete a user
+      tags:
+      - users
+    get:
+      consumes:
+      - application/json
+      description: Get a specific user by their ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.User'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a user by ID
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Update an existing user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: User object
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/main.User'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.User'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a user
+      tags:
+      - users
 produces:
+- application/json
 - application/json
 swagger: "2.0"
