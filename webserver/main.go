@@ -23,60 +23,63 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// @title User Management API
-// @version 2.0
-// @description This is a user management and todo list server with SQLite database, JWT authentication, and bcrypt password hashing.
-// @termsOfService http://swagger.io/terms/
+//	@title			User Management API
+//	@version		2.0
+//	@description	This is a user management and todo list server with SQLite database, JWT authentication, and bcrypt password hashing.
+//	@termsOfService	http://swagger.io/terms/
 
-// @contact.name API Support
-// @contact.url http://www.swagger.io/support
-// @contact.email support@swagger.io
+//	@contact.name	API Support
+//	@contact.url	http://www.swagger.io/support
+//	@contact.email	support@swagger.io
 
-// @license.name Apache 2.0
-// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+//	@license.name	Apache 2.0
+//	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
 
-// @host localhost:8080
-// @BasePath /
+//	@host		localhost:8080
+//	@BasePath	/
 
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-// @description Type "Bearer" followed by a space and JWT token.
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Type "Bearer" followed by a space and JWT token.
 
 // Todo 代表一个简单的待办事项
-// @Description Todo 代表一个简单的待办事项
+//
+//	@Description	Todo 代表一个简单的待办事项
 type Todo struct {
-	ID        int64     `json:"id"`         // @Description Todo ID
-	UserID    int64     `json:"user_id"`    // @Description User ID who owns this todo
-	Title     string    `json:"title"`      // @Description Todo title
-	Completed bool      `json:"completed"`  // @Description Todo completion status
-	CreatedAt time.Time `json:"created_at"` // @Description Todo creation time
+	ID        int64     `json:"id"`         //	@Description	Todo ID
+	UserID    int64     `json:"user_id"`    //	@Description	User ID who owns this todo
+	Title     string    `json:"title"`      //	@Description	Todo title
+	Completed bool      `json:"completed"`  //	@Description	Todo completion status
+	CreatedAt time.Time `json:"created_at"` //	@Description	Todo creation time
 }
 
 // User 用户结构体
-// @Description User 用户结构体
-// @ID User
-// @Accept json
-// @Produce json
+//
+//	@Description	User 用户结构体
+//	@ID				User
+//	@Accept			json
+//	@Produce		json
 type User struct {
-	ID        int64     `json:"id"`         // @Description User ID
-	Username  string    `json:"username"`   // @Description User username
-	Password  string    `json:"password"`   // @Description User password
-	Phone     string    `json:"phone"`      // @Description User phone
-	Email     string    `json:"email"`      // @Description User email
-	CreatedAt time.Time `json:"created_at"` // @Description User creation time
+	ID        int64     `json:"id"`         //	@Description	User ID
+	Username  string    `json:"username"`   //	@Description	User username
+	Password  string    `json:"password"`   //	@Description	User password
+	Phone     string    `json:"phone"`      //	@Description	User phone
+	Email     string    `json:"email"`      //	@Description	User email
+	CreatedAt time.Time `json:"created_at"` //	@Description	User creation time
 }
 
 // Image 图片结构体
-// @Description Image 图片结构体
-// @ID Image
-// @Accept json
-// @Produce json
+//
+//	@Description	Image 图片结构体
+//	@ID				Image
+//	@Accept			json
+//	@Produce		json
 type Image struct {
-	ID        int64     `json:"id"`         // @Description Image ID
-	UserID    int64     `json:"user_id"`    // @Description Image user ID
-	ImageData []byte    `json:"image_data"` // @Description Image data
-	CreatedAt time.Time `json:"created_at"` // @Description Image creation time
+	ID        int64     `json:"id"`         //	@Description	Image ID
+	UserID    int64     `json:"user_id"`    //	@Description	Image user ID
+	ImageData []byte    `json:"image_data"` //	@Description	Image data
+	CreatedAt time.Time `json:"created_at"` //	@Description	Image creation time
 }
 
 // Database 连接
@@ -297,27 +300,31 @@ func init() {
 }
 
 // handleHealth 简单健康检查
-// @Summary Health check
-// @Description Simple health check endpoint
-// @Tags health
-// @Accept json
-// @Produce json
-// @Success 200 {object} map[string]string
-// @Router /health [get]
+//
+//	@Summary		Health check
+//	@Description	Simple health check endpoint
+//	@Tags			health
+//	@Accept			json
+//	@Produce		json
+//	@Success		200	{object}	map[string]string
+//	@Router			/health [get]
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // handleListTodos 处理 GET /todos
-// @Summary List all todos
-// @Description Get all todos from database
-// @Tags todos
-// @Accept json
-// @Produce json
-// @Param user_id query int false "Filter by user ID"
-// @Success 200 {array} Todo
-// @Failure 500 {object} map[string]string
-// @Router /todos [get]
+//
+//	@Summary		List all todos
+//	@Description	Get all todos from database
+//	@Tags			todos
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			user_id	query		int	false	"Filter by user ID"
+//	@Success		200		{array}		Todo
+//	@Failure		401		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/todos [get]
 func handleListTodos(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -360,17 +367,20 @@ func handleListTodos(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetTodo 处理 GET /todos/{id}
-// @Summary Get a todo by ID
-// @Description Get a specific todo by its ID
-// @Tags todos
-// @Accept json
-// @Produce json
-// @Param id path int true "Todo ID"
-// @Success 200 {object} Todo
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /todos/{id} [get]
+//
+//	@Summary		Get a todo by ID
+//	@Description	Get a specific todo by its ID
+//	@Tags			todos
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"Todo ID"
+//	@Success		200	{object}	Todo
+//	@Failure		400	{object}	map[string]string
+//	@Failure		401	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/todos/{id} [get]
 func handleGetTodo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -401,16 +411,19 @@ func handleGetTodo(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCreateTodo 处理 POST /todos
-// @Summary Create a new todo
-// @Description Create a new todo item
-// @Tags todos
-// @Accept json
-// @Produce json
-// @Param todo body Todo true "Todo object"
-// @Success 201 {object} Todo
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /todos [post]
+//
+//	@Summary		Create a new todo
+//	@Description	Create a new todo item
+//	@Tags			todos
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			todo	body		Todo	true	"Todo object"
+//	@Success		201		{object}	Todo
+//	@Failure		400		{object}	map[string]string
+//	@Failure		401		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/todos [post]
 func handleCreateTodo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -472,18 +485,21 @@ func handleCreateTodo(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdateTodo 处理 PUT /todos/{id}
-// @Summary Update a todo
-// @Description Update an existing todo item
-// @Tags todos
-// @Accept json
-// @Produce json
-// @Param id path int true "Todo ID"
-// @Param todo body Todo true "Todo object"
-// @Success 200 {object} Todo
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /todos/{id} [put]
+//
+//	@Summary		Update a todo
+//	@Description	Update an existing todo item
+//	@Tags			todos
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int		true	"Todo ID"
+//	@Param			todo	body		Todo	true	"Todo object"
+//	@Success		200		{object}	Todo
+//	@Failure		400		{object}	map[string]string
+//	@Failure		401		{object}	map[string]string
+//	@Failure		404		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/todos/{id} [put]
 func handleUpdateTodo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		w.Header().Set("Allow", http.MethodPut)
@@ -561,17 +577,20 @@ func handleUpdateTodo(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteTodo 处理 DELETE /todos/{id}
-// @Summary Delete a todo
-// @Description Delete an existing todo item
-// @Tags todos
-// @Accept json
-// @Produce json
-// @Param id path int true "Todo ID"
-// @Success 204 {object} nil
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /todos/{id} [delete]
+//
+//	@Summary		Delete a todo
+//	@Description	Delete an existing todo item
+//	@Tags			todos
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"Todo ID"
+//	@Success		204	{object}	nil
+//	@Failure		400	{object}	map[string]string
+//	@Failure		401	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/todos/{id} [delete]
 func handleDeleteTodo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		w.Header().Set("Allow", http.MethodDelete)
@@ -602,14 +621,15 @@ func handleDeleteTodo(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListUsers 处理 GET /users
-// @Summary List all users
-// @Description Get all users from database
-// @Tags users
-// @Accept json
-// @Produce json
-// @Success 200 {array} User
-// @Failure 500 {object} map[string]string
-// @Router /users [get]
+//
+//	@Summary		List all users
+//	@Description	Get all users from database
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Success		200	{array}		User
+//	@Failure		500	{object}	map[string]string
+//	@Router			/users [get]
 func handleListUsers(w http.ResponseWriter, _ *http.Request) {
 	rows, err := db.Query("SELECT id, username, password, phone, email, created_at FROM users")
 	if err != nil {
@@ -632,17 +652,18 @@ func handleListUsers(w http.ResponseWriter, _ *http.Request) {
 }
 
 // handleGetUser 处理 GET /users/{id}
-// @Summary Get a user by ID
-// @Description Get a specific user by their ID
-// @Tags users
-// @Accept json
-// @Produce json
-// @Param id path int true "User ID"
-// @Success 200 {object} User
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /users/{id} [get]
+//
+//	@Summary		Get a user by ID
+//	@Description	Get a specific user by their ID
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Param			id	path		int	true	"User ID"
+//	@Success		200	{object}	User
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/users/{id} [get]
 func handleGetUser(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/users/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -667,16 +688,17 @@ func handleGetUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCreateUser 处理 POST /users
-// @Summary Create a new user
-// @Description Create a new user in database
-// @Tags users
-// @Accept json
-// @Produce json
-// @Param user body User true "User object"
-// @Success 201 {object} User
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /users [post]
+//
+//	@Summary		Create a new user
+//	@Description	Create a new user in database
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Param			user	body		User	true	"User object"
+//	@Success		201		{object}	User
+//	@Failure		400		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/users [post]
 func handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Username string `json:"username"`
@@ -752,18 +774,19 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdateUser 处理 PUT /users/{id}
-// @Summary Update a user
-// @Description Update an existing user
-// @Tags users
-// @Accept json
-// @Produce json
-// @Param id path int true "User ID"
-// @Param user body User true "User object"
-// @Success 200 {object} User
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /users/{id} [put]
+//
+//	@Summary		Update a user
+//	@Description	Update an existing user
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		int		true	"User ID"
+//	@Param			user	body		User	true	"User object"
+//	@Success		200		{object}	User
+//	@Failure		400		{object}	map[string]string
+//	@Failure		404		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/users/{id} [put]
 func handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/users/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -849,17 +872,18 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteUser 处理 DELETE /users/{id}
-// @Summary Delete a user
-// @Description Delete an existing user
-// @Tags users
-// @Accept json
-// @Produce json
-// @Param id path int true "User ID"
-// @Success 204 {object} nil
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /users/{id} [delete]
+//
+//	@Summary		Delete a user
+//	@Description	Delete an existing user
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Param			id	path		int	true	"User ID"
+//	@Success		204	{object}	nil
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/users/{id} [delete]
 func handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/users/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -914,17 +938,18 @@ func handleResetPassword(w http.ResponseWriter, _ *http.Request) {
 }
 
 // handleLogin 处理用户登录
-// @Summary User login
-// @Description Login with username and password to get JWT token
-// @Tags auth
-// @Accept json
-// @Produce json
-// @Param login body LoginRequest true "Login credentials"
-// @Success 200 {object} LoginResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /login [post]
+//
+//	@Summary		User login
+//	@Description	Login with username and password to get JWT token
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			login	body		LoginRequest	true	"Login credentials"
+//	@Success		200		{object}	LoginResponse
+//	@Failure		400		{object}	map[string]string
+//	@Failure		401		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/login [post]
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	var input LoginRequest
 
@@ -980,19 +1005,19 @@ func main() {
 	mux := http.NewServeMux()
 
 	// 健康检查
-	// @Summary Health check
-	// @Description Simple health check endpoint
-	// @Tags health
-	// @Accept json
-	// @Produce json
-	// @Success 200 {object} map[string]string
-	// @Router /health [get]
+	//	@Summary		Health check
+	//	@Description	Simple health check endpoint
+	//	@Tags			health
+	//	@Accept			json
+	//	@Produce		json
+	//	@Success		200	{object}	map[string]string
+	//	@Router			/health [get]
 	mux.HandleFunc("/health", handleHealth)
 
 	// 登录路由（不需要认证）
-	// @Summary Login API
-	// @Description User login endpoint
-	// @Tags auth
+	//	@Summary		Login API
+	//	@Description	User login endpoint
+	//	@Tags			auth
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
@@ -1013,10 +1038,10 @@ func main() {
 	})
 
 	// Todo 管理路由（需要认证）
-	// @Summary Todo API
-	// @Description RESTful Todo API endpoints (requires authentication)
-	// @Tags todos
-	// @Security BearerAuth
+	//	@Summary		Todo API
+	//	@Description	RESTful Todo API endpoints (requires authentication)
+	//	@Tags			todos
+	//	@Security		BearerAuth
 	mux.HandleFunc("/todos", func(w http.ResponseWriter, r *http.Request) {
 		// 需要认证
 		authMiddleware(func(w http.ResponseWriter, r *http.Request) {
@@ -1050,9 +1075,9 @@ func main() {
 	})
 
 	// 用户管理路由
-	// @Summary User API
-	// @Description RESTful User API endpoints
-	// @Tags users
+	//	@Summary		User API
+	//	@Description	RESTful User API endpoints
+	//	@Tags			users
 	mux.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -1080,9 +1105,9 @@ func main() {
 	})
 
 	// 图片管理路由
-	// @Summary Image API
-	// @Description RESTful Image API endpoints
-	// @Tags images
+	//	@Summary		Image API
+	//	@Description	RESTful Image API endpoints
+	//	@Tags			images
 	mux.HandleFunc("/images", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -1110,9 +1135,9 @@ func main() {
 	})
 
 	// 密码重置路由
-	// @Summary Password Reset API
-	// @Description RESTful Password Reset API endpoints
-	// @Tags password
+	//	@Summary		Password Reset API
+	//	@Description	RESTful Password Reset API endpoints
+	//	@Tags			password
 	mux.HandleFunc("/reset-password", handleResetPassword)
 
 	// Swagger docs

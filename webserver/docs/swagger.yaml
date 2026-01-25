@@ -21,41 +21,41 @@ definitions:
     description: Todo 代表一个简单的待办事项
     properties:
       completed:
-        description: '@Description Todo completion status'
+        description: "@Description\tTodo completion status"
         type: boolean
       created_at:
-        description: '@Description Todo creation time'
+        description: "@Description\tTodo creation time"
         type: string
       id:
-        description: '@Description Todo ID'
+        description: "@Description\tTodo ID"
         type: integer
       title:
-        description: '@Description Todo title'
+        description: "@Description\tTodo title"
         type: string
       user_id:
-        description: '@Description User ID who owns this todo'
+        description: "@Description\tUser ID who owns this todo"
         type: integer
     type: object
   main.User:
     description: User 用户结构体
     properties:
       created_at:
-        description: '@Description User creation time'
+        description: "@Description\tUser creation time"
         type: string
       email:
-        description: '@Description User email'
+        description: "@Description\tUser email"
         type: string
       id:
-        description: '@Description User ID'
+        description: "@Description\tUser ID"
         type: integer
       password:
-        description: '@Description User password'
+        description: "@Description\tUser password"
         type: string
       phone:
-        description: '@Description User phone'
+        description: "@Description\tUser phone"
         type: string
       username:
-        description: '@Description User username'
+        description: "@Description\tUser username"
         type: string
     type: object
 host: localhost:8080
@@ -148,12 +148,20 @@ paths:
             items:
               $ref: '#/definitions/main.Todo'
             type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: List all todos
       tags:
       - todos
@@ -181,12 +189,20 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: Create a new todo
       tags:
       - todos
@@ -212,6 +228,12 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "404":
           description: Not Found
           schema:
@@ -224,6 +246,8 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: Delete a todo
       tags:
       - todos
@@ -250,6 +274,12 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "404":
           description: Not Found
           schema:
@@ -262,6 +292,8 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: Get a todo by ID
       tags:
       - todos
@@ -294,6 +326,12 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "404":
           description: Not Found
           schema:
@@ -306,6 +344,8 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: Update a todo
       tags:
       - todos

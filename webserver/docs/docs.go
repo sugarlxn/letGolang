@@ -122,6 +122,11 @@ const docTemplate = `{
         },
         "/todos": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Get all todos from database",
                 "consumes": [
                     "application/json"
@@ -151,6 +156,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -163,6 +177,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Create a new todo item",
                 "consumes": [
                     "application/json"
@@ -201,6 +220,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -215,6 +243,11 @@ const docTemplate = `{
         },
         "/todos/{id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Get a specific todo by its ID",
                 "consumes": [
                     "application/json"
@@ -251,6 +284,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -272,6 +314,11 @@ const docTemplate = `{
                 }
             },
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Update an existing todo item",
                 "consumes": [
                     "application/json"
@@ -317,6 +364,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -338,6 +394,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Delete an existing todo item",
                 "consumes": [
                     "application/json"
@@ -364,6 +425,15 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -685,23 +755,23 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "completed": {
-                    "description": "@Description Todo completion status",
+                    "description": "@Description\tTodo completion status",
                     "type": "boolean"
                 },
                 "created_at": {
-                    "description": "@Description Todo creation time",
+                    "description": "@Description\tTodo creation time",
                     "type": "string"
                 },
                 "id": {
-                    "description": "@Description Todo ID",
+                    "description": "@Description\tTodo ID",
                     "type": "integer"
                 },
                 "title": {
-                    "description": "@Description Todo title",
+                    "description": "@Description\tTodo title",
                     "type": "string"
                 },
                 "user_id": {
-                    "description": "@Description User ID who owns this todo",
+                    "description": "@Description\tUser ID who owns this todo",
                     "type": "integer"
                 }
             }
@@ -711,27 +781,27 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "created_at": {
-                    "description": "@Description User creation time",
+                    "description": "@Description\tUser creation time",
                     "type": "string"
                 },
                 "email": {
-                    "description": "@Description User email",
+                    "description": "@Description\tUser email",
                     "type": "string"
                 },
                 "id": {
-                    "description": "@Description User ID",
+                    "description": "@Description\tUser ID",
                     "type": "integer"
                 },
                 "password": {
-                    "description": "@Description User password",
+                    "description": "@Description\tUser password",
                     "type": "string"
                 },
                 "phone": {
-                    "description": "@Description User phone",
+                    "description": "@Description\tUser phone",
                     "type": "string"
                 },
                 "username": {
-                    "description": "@Description User username",
+                    "description": "@Description\tUser username",
                     "type": "string"
                 }
             }
