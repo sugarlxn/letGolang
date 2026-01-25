@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// TODO
 func main() {
 	fmt.Println("good day todat")
 

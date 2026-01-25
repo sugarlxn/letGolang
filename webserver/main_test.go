@@ -1,67 +1,36 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"webserver/testutil"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// setupTestDB 使用 migrations 文件自动初始化测试数据库
+// 优势：
+// 1. 与生产环境 schema 完全一致
+// 2. 新增字段/表时无需修改测试代码
+// 3. 遵循大厂最佳实践
 func setupTestDB(t *testing.T) {
 	t.Helper()
 
+	// 设置测试环境变量
 	jwtSecret = []byte("test-secret")
 	infoLog = log.New(io.Discard, "", 0)
 	errorLog = log.New(io.Discard, "", 0)
 
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "test.db")
-
-	var err error
-	db, err = sql.Open("sqlite3", dbPath)
-	if err != nil {
-		t.Fatalf("failed to open test db: %v", err)
-	}
-
-	createTables := []string{
-		`CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
-            phone TEXT,
-            email TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );`,
-		`CREATE TABLE IF NOT EXISTS images (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            image_data BLOB NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );`,
-		`CREATE TABLE IF NOT EXISTS todos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            completed BOOLEAN DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );`,
-	}
-
-	for _, stmt := range createTables {
-		if _, err := db.Exec(stmt); err != nil {
-			t.Fatalf("failed to create table: %v", err)
-		}
-	}
+	// 使用 testutil 自动运行所有 migrations
+	// 这样当你在 migrations/ 中添加新的 SQL 文件时，测试会自动使用最新的 schema
+	db = testutil.SetupTestDB(t)
 }
 
 func createTestUser(t *testing.T, username string) User {

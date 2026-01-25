@@ -8,9 +8,11 @@ const docTemplate = `{
     "schemes": {{ marshal .Schemes }},
     "consumes": [
         "application/json",
+        "application/json",
         "application/json"
     ],
     "produces": [
+        "application/json",
         "application/json",
         "application/json"
     ],
@@ -101,6 +103,182 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/prompts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all prompts created by a specific user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "prompts"
+                ],
+                "summary": "Get list of prompts by user ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "filter by user ID",
+                        "name": "user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/main.Prompt"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new prompt with the provided details",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "prompts"
+                ],
+                "summary": "Create a new prompt",
+                "parameters": [
+                    {
+                        "description": "Prompt details",
+                        "name": "prompt",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.Prompt"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/main.Prompt"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/prompts/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve a specific prompt by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "prompts"
+                ],
+                "summary": "Get a prompt by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Prompt ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.Prompt"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -750,6 +928,40 @@ const docTemplate = `{
                 }
             }
         },
+        "main.Prompt": {
+            "description": "Prompts 提示词 结构体",
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "description": "@Description\tPrompts creation time",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "@Description\tPrompts ID",
+                    "type": "integer"
+                },
+                "image_id": {
+                    "description": "@Description\tPrompts image ID",
+                    "type": "integer"
+                },
+                "inference_steps": {
+                    "description": "@Description\tPrompts inference step",
+                    "type": "integer"
+                },
+                "negative_prompt_text": {
+                    "description": "@Description\tPrompts negative text",
+                    "type": "string"
+                },
+                "prompt_text": {
+                    "description": "@Description\tPrompts text",
+                    "type": "string"
+                },
+                "user_id": {
+                    "description": "@Description\tPrompts user ID",
+                    "type": "integer"
+                }
+            }
+        },
         "main.Todo": {
             "description": "Todo 代表一个简单的待办事项",
             "type": "object",
@@ -824,7 +1036,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "User Management API",
-	Description:      "Image creation time",
+	Description:      "Prompts creation time",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 }

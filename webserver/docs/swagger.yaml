@@ -2,6 +2,7 @@ basePath: /
 consumes:
 - application/json
 - application/json
+- application/json
 definitions:
   main.LoginRequest:
     properties:
@@ -16,6 +17,31 @@ definitions:
         type: string
       user:
         $ref: '#/definitions/main.User'
+    type: object
+  main.Prompt:
+    description: Prompts 提示词 结构体
+    properties:
+      created_at:
+        description: "@Description\tPrompts creation time"
+        type: string
+      id:
+        description: "@Description\tPrompts ID"
+        type: integer
+      image_id:
+        description: "@Description\tPrompts image ID"
+        type: integer
+      inference_steps:
+        description: "@Description\tPrompts inference step"
+        type: integer
+      negative_prompt_text:
+        description: "@Description\tPrompts negative text"
+        type: string
+      prompt_text:
+        description: "@Description\tPrompts text"
+        type: string
+      user_id:
+        description: "@Description\tPrompts user ID"
+        type: integer
     type: object
   main.Todo:
     description: Todo 代表一个简单的待办事项
@@ -64,7 +90,7 @@ info:
     email: support@swagger.io
     name: API Support
     url: http://www.swagger.io/support
-  description: Image creation time
+  description: Prompts creation time
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
@@ -129,6 +155,118 @@ paths:
       summary: User login
       tags:
       - auth
+  /prompts:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all prompts created by a specific user
+      parameters:
+      - description: filter by user ID
+        in: query
+        name: user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/main.Prompt'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get list of prompts by user ID
+      tags:
+      - prompts
+    post:
+      consumes:
+      - application/json
+      description: Create a new prompt with the provided details
+      parameters:
+      - description: Prompt details
+        in: body
+        name: prompt
+        required: true
+        schema:
+          $ref: '#/definitions/main.Prompt'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.Prompt'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new prompt
+      tags:
+      - prompts
+  /prompts/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a specific prompt by its ID
+      parameters:
+      - description: Prompt ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Prompt'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a prompt by ID
+      tags:
+      - prompts
   /todos:
     get:
       consumes:
@@ -525,6 +663,7 @@ paths:
       tags:
       - users
 produces:
+- application/json
 - application/json
 - application/json
 securityDefinitions:

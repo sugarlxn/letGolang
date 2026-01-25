@@ -82,6 +82,22 @@ type Image struct {
 	CreatedAt time.Time `json:"created_at"` //	@Description	Image creation time
 }
 
+// Prompts 提示词 结构体
+//
+//	@Description	Prompts 提示词 结构体
+//	@ID				Prompts
+//	@Accept			json
+//	@Produce		json
+type Prompt struct {
+	ID                 int64     `json:"id"`                   //	@Description	Prompts ID
+	UserID             int64     `json:"user_id"`              //	@Description	Prompts user ID
+	ImageID            int64     `json:"image_id"`             //	@Description	Prompts image ID
+	PromptText         string    `json:"prompt_text"`          //	@Description	Prompts text
+	NegativePromptText string    `json:"negative_prompt_text"` //	@Description	Prompts negative text
+	InferenceSteps     int64     `json:"inference_steps"`      //	@Description	Prompts inference step
+	CreatedAt          time.Time `json:"created_at"`           //	@Description	Prompts creation time
+}
+
 // Database 连接
 var db *sql.DB
 
@@ -239,62 +255,11 @@ func validatePassword(password string) bool {
 	return len(password) >= 6
 }
 
-// 初始化数据库
-func initDB() {
-	var err error
-	db, err = sql.Open("sqlite3", "./test.db")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// 创建用户表
-	_, err = db.Exec(
-		`CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
-            phone TEXT,
-            email TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );`)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// 创建图片表
-	_, err = db.Exec(
-		`CREATE TABLE IF NOT EXISTS images (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            image_data BLOB NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );`)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// 创建 todos 表
-	_, err = db.Exec(
-		`CREATE TABLE IF NOT EXISTS todos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            completed BOOLEAN DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );`)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 func init() {
 	// 初始化日志
 	infoLog = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	errorLog = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 
-	initDB()
 	rand.Seed(time.Now().UnixNano())
 	infoLog.Println("Server initialized successfully")
 }
@@ -907,34 +872,342 @@ func handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleListImages 处理 GET /images
+// TODO: handleListImages 处理 GET /images
 func handleListImages(w http.ResponseWriter, _ *http.Request) {
 	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
 }
 
-// handleGetImage 处理 GET /images/{id}
+// TODO: handleGetImage 处理 GET /images/{id}
 func handleGetImage(w http.ResponseWriter, _ *http.Request) {
 	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
 }
 
-// handleCreateImage 处理 POST /images
+// TODO: handleCreateImage 处理 POST /images
 func handleCreateImage(w http.ResponseWriter, _ *http.Request) {
 	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
 }
 
-// handleUpdateImage 处理 PUT /images/{id}
+// TODO: handleUpdateImage 处理 PUT /images/{id}
 func handleUpdateImage(w http.ResponseWriter, _ *http.Request) {
 	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
 }
 
-// handleDeleteImage 处理 DELETE /images/{id}
+// TODO: handleDeleteImage 处理 DELETE /images/{id}
 func handleDeleteImage(w http.ResponseWriter, _ *http.Request) {
 	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
 }
 
-// handleResetPassword 处理密码重置
+// TODO: handleResetPassword 处理密码重置
 func handleResetPassword(w http.ResponseWriter, _ *http.Request) {
 	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
+}
+
+// headleListPrompts 处理 GET /prompts
+//
+//	@Summary		Get list of prompts by user ID
+//	@Description	Retrieve all prompts created by a specific user
+//	@Tags			prompts
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			user_id	query		int	false	"filter by user ID"
+//	@Success		200		{array}		Prompt
+//	@Failure		400		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/prompts [get]
+func handleListPrompts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	userIDStr := r.URL.Query().Get("user_id")
+	var rows *sql.Rows
+	var err error
+
+	if userIDStr != "" {
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			errorResponse(w, http.StatusBadRequest, "invalid user_id")
+			return
+		}
+		rows, err = db.Query("SELECT id, user_id, image_id, prompt_text, negative_prompt_text, inference_steps, created_at FROM prompts WHERE user_id = ?", userID)
+	} else {
+		rows, err = db.Query("SELECT id, user_id, image_id, prompt_text, negative_prompt_text, inference_steps, created_at FROM prompts")
+	}
+
+	if err != nil {
+		errorLog.Printf("Database query failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database query failed")
+		return
+	}
+	defer rows.Close()
+
+	var prompts []Prompt
+	for rows.Next() {
+		var p Prompt
+		if err := rows.Scan(&p.ID, &p.UserID, &p.ImageID, &p.PromptText, &p.NegativePromptText, &p.InferenceSteps, &p.CreatedAt); err != nil {
+			errorLog.Printf("Failed to scan row: %v", err)
+			errorResponse(w, http.StatusInternalServerError, "failed to scan row")
+			return
+		}
+		prompts = append(prompts, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		errorLog.Printf("Row iteration failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "row iteration failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, prompts)
+}
+
+// handleGetPrompt 处理 GET /prompts/{id}
+//
+//	@Summary		Get a prompt by ID
+//	@Description	Retrieve a specific prompt by its ID
+//	@Tags			prompts
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"Prompt ID"
+//	@Success		200	{object}	Prompt
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/prompts/{id} [get]
+func handleGetPrompt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	idStr := strings.TrimPrefix(r.URL.Path, "/prompts/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid prompt ID")
+		return
+	}
+
+	var p Prompt
+	err = db.QueryRow("SELECT id, user_id, image_id, prompt_text, negative_prompt_text, inference_steps, created_at FROM prompts WHERE id = ?", id).Scan(
+		&p.ID, &p.UserID, &p.ImageID, &p.PromptText, &p.NegativePromptText, &p.InferenceSteps, &p.CreatedAt)
+
+	if err == sql.ErrNoRows {
+		errorResponse(w, http.StatusNotFound, "prompt not found")
+		return
+	} else if err != nil {
+		errorLog.Printf("Database query failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database query failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, p)
+
+}
+
+// handleCreatePrompt 处理 POST /prompts
+//
+//	@Summary		Create a new prompt
+//	@Description	Create a new prompt with the provided details
+//	@Tags			prompts
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			prompt	body		Prompt	true	"Prompt details"
+//	@Success		201		{object}	Prompt
+//	@Failure		400		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/prompts [post]
+func handleCreatePrompt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var p Prompt
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+
+		errorResponse(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	// 验证必填字段
+	if p.UserID == 0 || p.ImageID == 0 || p.PromptText == "" {
+		errorResponse(w, http.StatusBadRequest, "user_id, image_id, and prompt_text are required")
+		return
+	}
+
+	// 检查用户是否存在
+	var exit int
+	err := db.QueryRow("SELECT COUNT(*) FROM users WHERE id = ?", p.UserID).Scan(&exit)
+	if err != nil {
+		errorLog.Printf("Database query failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database query failed")
+		return
+	}
+
+	if exit == 0 {
+		errorResponse(w, http.StatusBadRequest, "user does not exist")
+		return
+	}
+
+	result, err := db.Exec(
+		"INSERT INTO prompts (user_id, image_id, prompt_text, negative_prompt_text, inference_steps) VALUES (?, ?, ?, ?, ?)",
+		p.UserID, p.ImageID, p.PromptText, p.NegativePromptText, p.InferenceSteps)
+
+	if err != nil {
+		errorLog.Printf("Database insert failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database insert failed")
+		return
+	}
+
+	id, _ := result.LastInsertId()
+
+	var prompt Prompt
+	err = db.QueryRow("SELECT id, user_id, image_id, prompt_text, negative_prompt_text, inference_steps, created_at FROM prompts WHERE id = ?", id).Scan(
+		&prompt.ID, &prompt.UserID, &prompt.ImageID, &prompt.PromptText, &prompt.NegativePromptText, &prompt.InferenceSteps, &prompt.CreatedAt)
+
+	if err != nil {
+		errorLog.Printf("Failed to retrieve created prompt: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "failed to retrieve created prompt")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, prompt)
+
+}
+
+// handleUpdatePrompt 处理 PUT /prompts/{id}
+//
+// @Summary 		Update a prompt
+// @Description 	Update an existing prompt
+// @Tags			prompts
+// @Accept			json
+// @Produce			json
+// @Security		BearerAuth
+// @Param			id	path		int	true	"Prompt ID"
+// @Param			prompt	body		Prompt	true	"Prompt object"
+// @Success		200	{object}	Prompt
+// @Failure		400	{object}	map[string]string
+// @Failure		404	{object}	map[string]string
+// @Failure		500	{object}	map[string]string
+// @Router			/prompts/{id} [put]
+func handleUpdatePrompt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		w.Header().Set("Allow", http.MethodPut)
+		errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	idStr := strings.TrimPrefix(r.URL.Path, "/prompts/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid prompt ID")
+		return
+	}
+
+	var p Prompt
+	err = json.NewDecoder(r.Body).Decode(&p)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// 验证必填字段
+	if p.UserID == 0 || p.ImageID == 0 || p.PromptText == "" {
+		errorResponse(w, http.StatusBadRequest, "user_id, image_id, and prompt_text are required")
+		return
+	}
+
+	// 检查用户是否存在
+	var exit int
+	err = db.QueryRow("SELECT COUNT(*) FROM Prompts WHERE id = ?", id).Scan(&exit)
+	if err != nil {
+		errorLog.Printf("Database query failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database query failed")
+		return
+	}
+
+	if exit == 0 {
+		errorResponse(w, http.StatusNotFound, "prompt not found")
+		return
+	}
+
+	_, err = db.Exec("UPDATE prompts SET user_id = ?, image_id = ?, prompt_text = ?, negative_prompt_text = ?, inference_steps = ? WHERE id = ?",
+		p.UserID, p.ImageID, p.PromptText, p.NegativePromptText, p.InferenceSteps, id)
+
+	if err != nil {
+		errorLog.Printf("Database update failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database update failed")
+		return
+	}
+
+	var updatedPrompt Prompt
+	err = db.QueryRow("SELECT id, user_id, image_id, prompt_text, negative_prompt_text, inference_steps, created_at FROM prompts WHERE id = ?", id).Scan(
+		&updatedPrompt.ID, &updatedPrompt.UserID, &updatedPrompt.ImageID, &updatedPrompt.PromptText, &updatedPrompt.NegativePromptText, &updatedPrompt.InferenceSteps, &updatedPrompt.CreatedAt)
+
+	if err != nil {
+		errorLog.Printf("Failed to retrieve updated prompt: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "failed to retrieve updated prompt")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, updatedPrompt)
+}
+
+// handleDeletePrompt 处理 DELETE /prompts/{id}
+//
+// @Summary 		Delete a prompt
+// @Description 	Delete an existing prompt
+// @Tags			prompts
+// @Accept			json
+// @Produce			json
+// @Security		BearerAuth
+// @Param			id	path		int	true	"Prompt ID"
+// @Success		204	{object}	nil
+// @Failure		400	{object}	map[string]string
+// @Failure		404	{object}	map[string]string
+// @Failure		500	{object}	map[string]string
+// @Router			/prompts/{id} [delete]
+func handleDeletePrompt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.Header().Set("Allow", http.MethodDelete)
+		errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	idStr := strings.TrimPrefix(r.URL.Path, "/prompts/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid prompt ID")
+		return
+	}
+
+	result, err := db.Exec("DELETE FROM prompts WHERE id = ?", id)
+	if err != nil {
+		errorLog.Printf("Database delete failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database delete failed")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		errorLog.Printf("Failed to get rows affected: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "failed to get rows affected")
+		return
+	}
+
+	if rowsAffected == 0 {
+		errorResponse(w, http.StatusNotFound, "prompt not found")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleLogin 处理用户登录
@@ -1128,6 +1401,36 @@ func main() {
 			handleUpdateImage(w, r)
 		case http.MethodDelete:
 			handleDeleteImage(w, r)
+		default:
+			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
+			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	// Prompt 管理路 不需要认证
+	// @Summary 		Prompt API
+	// @Description		RESTful Prompt API endpoints
+	// @Tags			prompts
+	mux.HandleFunc("/prompts", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleListPrompts(w, r)
+		case http.MethodPost:
+			handleCreatePrompt(w, r)
+		default:
+			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
+			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/prompts/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleGetPrompt(w, r)
+		case http.MethodPut:
+			handleUpdatePrompt(w, r)
+		case http.MethodDelete:
+			handleDeletePrompt(w, r)
 		default:
 			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
 			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
