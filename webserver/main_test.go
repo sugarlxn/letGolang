@@ -73,6 +73,17 @@ func bearerFor(t *testing.T, user User) string {
 	return "Bearer " + token
 }
 
+func insertPrompt(t *testing.T, userID int64, imageID int64, prompt string, negative_prompt_text string, inferencer_steps int64) int64 {
+	t.Helper()
+
+	res, err := db.Exec("INSERT INTO prompts (user_id, image_id, prompt_text, negative_prompt_text, inference_steps) VALUES (?, ?, ?, ?, ?)", userID, imageID, prompt, negative_prompt_text, inferencer_steps)
+	if err != nil {
+		t.Fatalf("failed to insert prompt: %v", err)
+	}
+	id, _ := res.LastInsertId()
+	return id
+}
+
 func TestHandleHealthOK(t *testing.T) {
 	setupTestDB(t)
 
@@ -299,4 +310,42 @@ func TestHandleDeleteTodo(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("todo not deleted")
 	}
+}
+
+func TestHandleListPrompts(t *testing.T) {
+	setupTestDB(t)
+	user := createTestUser(t, "hannah")
+
+	// Insert test prompts
+	insertPrompt(t, user.ID, 1, "Prompt 1", "negative prompt 1", 20)
+	insertPrompt(t, user.ID, 2, "Prompt 2", "negative prompt 2", 25)
+
+	req := httptest.NewRequest(http.MethodGet, "/prompts", nil)
+	req.Header.Set("Authorization", bearerFor(t, user))
+	rr := httptest.NewRecorder()
+
+	authMiddleware(handleListPrompts)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var prompts []Prompt
+	if err := json.NewDecoder(rr.Body).Decode(&prompts); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(prompts) != 2 {
+		t.Fatalf("expected 2 prompts, got %d", len(prompts))
+	}
+
+	// Verify the prompts are in the correct order (newest first)
+	if prompts[0].PromptText != "Prompt 1" || prompts[1].PromptText != "Prompt 2" {
+		t.Fatalf("expected prompts in order: Prompt 1, Prompt 2; got: %s, %s", prompts[0].PromptText, prompts[1].PromptText)
+	}
+	// Verify that negative prompt text and inference steps are correctly stored
+	if prompts[0].NegativePromptText != "negative prompt 1" || prompts[0].InferenceSteps != 20 {
+		t.Fatalf("expected prompt 1 details to match; got negative_prompt_text=%s, inference_steps=%d", prompts[0].NegativePromptText, prompts[0].InferenceSteps)
+	}
+
 }
