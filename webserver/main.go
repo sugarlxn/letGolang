@@ -1084,19 +1084,19 @@ func handleCreatePrompt(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdatePrompt 处理 PUT /prompts/{id}
 //
-// @Summary 		Update a prompt
-// @Description 	Update an existing prompt
-// @Tags			prompts
-// @Accept			json
-// @Produce			json
-// @Security		BearerAuth
-// @Param			id	path		int	true	"Prompt ID"
-// @Param			prompt	body		Prompt	true	"Prompt object"
-// @Success		200	{object}	Prompt
-// @Failure		400	{object}	map[string]string
-// @Failure		404	{object}	map[string]string
-// @Failure		500	{object}	map[string]string
-// @Router			/prompts/{id} [put]
+//	@Summary		Update a prompt
+//	@Description	Update an existing prompt
+//	@Tags			prompts
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int		true	"Prompt ID"
+//	@Param			prompt	body		Prompt	true	"Prompt object"
+//	@Success		200		{object}	Prompt
+//	@Failure		400		{object}	map[string]string
+//	@Failure		404		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/prompts/{id} [put]
 func handleUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		w.Header().Set("Allow", http.MethodPut)
@@ -1162,18 +1162,18 @@ func handleUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 
 // handleDeletePrompt 处理 DELETE /prompts/{id}
 //
-// @Summary 		Delete a prompt
-// @Description 	Delete an existing prompt
-// @Tags			prompts
-// @Accept			json
-// @Produce			json
-// @Security		BearerAuth
-// @Param			id	path		int	true	"Prompt ID"
-// @Success		204	{object}	nil
-// @Failure		400	{object}	map[string]string
-// @Failure		404	{object}	map[string]string
-// @Failure		500	{object}	map[string]string
-// @Router			/prompts/{id} [delete]
+//	@Summary		Delete a prompt
+//	@Description	Delete an existing prompt
+//	@Tags			prompts
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"Prompt ID"
+//	@Success		204	{object}	nil
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/prompts/{id} [delete]
 func handleDeletePrompt(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		w.Header().Set("Allow", http.MethodDelete)
@@ -1408,9 +1408,9 @@ func main() {
 	})
 
 	// Prompt 管理路 不需要认证
-	// @Summary 		Prompt API
-	// @Description		RESTful Prompt API endpoints
-	// @Tags			prompts
+	//	@Summary		Prompt API
+	//	@Description	RESTful Prompt API endpoints
+	//	@Tags			prompts
 	mux.HandleFunc("/prompts", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:

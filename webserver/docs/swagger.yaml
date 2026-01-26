@@ -227,6 +227,44 @@ paths:
       tags:
       - prompts
   /prompts/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an existing prompt
+      parameters:
+      - description: Prompt ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a prompt
+      tags:
+      - prompts
     get:
       consumes:
       - application/json
@@ -265,6 +303,52 @@ paths:
       security:
       - BearerAuth: []
       summary: Get a prompt by ID
+      tags:
+      - prompts
+    put:
+      consumes:
+      - application/json
+      description: Update an existing prompt
+      parameters:
+      - description: Prompt ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Prompt object
+        in: body
+        name: prompt
+        required: true
+        schema:
+          $ref: '#/definitions/main.Prompt'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Prompt'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a prompt
       tags:
       - prompts
   /todos:
