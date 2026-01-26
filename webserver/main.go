@@ -76,10 +76,15 @@ type User struct {
 //	@Accept			json
 //	@Produce		json
 type Image struct {
-	ID        int64     `json:"id"`         //	@Description	Image ID
-	UserID    int64     `json:"user_id"`    //	@Description	Image user ID
-	ImageData []byte    `json:"image_data"` //	@Description	Image data
-	CreatedAt time.Time `json:"created_at"` //	@Description	Image creation time
+	ID          int64     `json:"id"`           //	@Description	Image ID
+	UserID      int64     `json:"user_id"`      //	@Description	Image user ID
+	PromptID    int64     `json:"prompt_id"`    //	@Description	Image prompt ID
+	ImageData   []byte    `json:"image_data"`   //	@Description	Image data
+	ImagePath   string    `json:"image_path"`   //	@Description	Image path
+	ImageFormat string    `json:"image_format"` //	@Description	Image format (e.g., png, jpg)
+	Width       int       `json:"width"`        //	@Description	Image width
+	Height      int       `json:"height"`       //	@Description	Image height
+	CreatedAt   time.Time `json:"created_at"`   //	@Description	Image creation time
 }
 
 // Prompts 提示词 结构体
@@ -102,7 +107,7 @@ type Prompt struct {
 var db *sql.DB
 
 // JWT 密钥（生产环境应从环境变量读取）
-var jwtSecret = []byte(getEnv("JWT_SECRET", "your-secret-key-change-in-production"))
+var jwtSecret = []byte(getEnv("JWT_SECRET", "719c946d-14d8-4c9f-aac9-f807254bf447"))
 
 // 日志记录器
 var (
@@ -259,6 +264,9 @@ func init() {
 	// 初始化日志
 	infoLog = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	errorLog = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	time.Local = loc
 
 	rand.Seed(time.Now().UnixNano())
 	infoLog.Println("Server initialized successfully")
@@ -872,29 +880,283 @@ func handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// TODO: handleListImages 处理 GET /images
-func handleListImages(w http.ResponseWriter, _ *http.Request) {
-	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
+// handleListImages 处理 GET /images
+//
+//	@Summary		List all images
+//	@Description	Get all images from database
+//	@Tags			images
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			user_id	query		int	false	"Filter by user ID"
+//	@Success		200		{array}		Image
+//	@Failure		401		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/images [get]
+func handleListImages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	userIDStr := r.URL.Query().Get("user_id")
+	var rows *sql.Rows
+	var err error
+
+	if userIDStr != "" {
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			errorResponse(w, http.StatusBadRequest, "invalid user_id")
+			return
+		}
+		rows, err = db.Query("SELECT id, user_id, prompt_id, image_data, image_path, image_format, width, height, created_at FROM images WHERE user_id = ? LIMIT 10", userID)
+	} else {
+		rows, err = db.Query("SELECT id, user_id, prompt_id, image_data, image_path, image_format, width, height, created_at FROM images LIMIT 10")
+	}
+
+	if err != nil {
+		errorLog.Printf("Database query failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database query failed")
+		return
+	}
+	defer rows.Close()
+
+	var images []Image
+	for rows.Next() {
+		var img Image
+		if err := rows.Scan(&img.ID, &img.UserID, &img.PromptID, &img.ImageData, &img.ImagePath, &img.ImageFormat, &img.Width, &img.Height, &img.CreatedAt); err != nil {
+			errorLog.Printf("Row scan failed: %v", err)
+			errorResponse(w, http.StatusInternalServerError, "row scan failed")
+			return
+		}
+		images = append(images, img)
+	}
+
+	if err := rows.Err(); err != nil {
+		errorLog.Printf("Rows iteration failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "rows iteration failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, images)
 }
 
-// TODO: handleGetImage 处理 GET /images/{id}
-func handleGetImage(w http.ResponseWriter, _ *http.Request) {
-	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
+// handleGetImage 处理 GET /images/{id}
+//
+//	@Summary		Get an image by ID
+//	@Description	Retrieve a specific image by its ID
+//	@Tags			images
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"Image ID"
+//	@Success		200	{object}	Image
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/images/{id} [get]
+func handleGetImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	idStr := strings.TrimPrefix(r.URL.Path, "/images/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid image ID")
+		return
+	}
+
+	var img Image
+	err = db.QueryRow("SELECT id, user_id, prompt_id, image_data, image_path, image_format, width, height, created_at FROM images WHERE id = ?", id).Scan(
+		&img.ID, &img.UserID, &img.PromptID, &img.ImageData, &img.ImagePath, &img.ImageFormat, &img.Width, &img.Height, &img.CreatedAt)
+
+	if err == sql.ErrNoRows {
+		errorResponse(w, http.StatusNotFound, "image not found")
+		return
+	} else if err != nil {
+		errorLog.Printf("Database query failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database query failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, img)
 }
 
-// TODO: handleCreateImage 处理 POST /images
-func handleCreateImage(w http.ResponseWriter, _ *http.Request) {
-	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
+// handleCreateImage 处理 POST /images
+//
+//	@Summary		Create a new image
+//	@Description	Create a new image in database
+//	@Tags			images
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			image	body		Image	true	"Image object"
+//	@Success		201		{object}	Image
+//	@Failure		400		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/images [post]
+func handleCreateImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var input struct {
+		UserID      int64  `json:"user_id"`
+		PromptID    int64  `json:"prompt_id"`
+		ImageData   []byte `json:"image_data"`
+		ImagePath   string `json:"image_path"`
+		ImageFormat string `json:"image_format"`
+		Width       int    `json:"width"`
+		Height      int    `json:"height"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	input.ImagePath = strings.TrimSpace(input.ImagePath)
+	input.ImageFormat = strings.TrimSpace(strings.ToLower(input.ImageFormat))
+
+	if input.UserID == 0 {
+		errorResponse(w, http.StatusBadRequest, "user_id is required")
+		return
+	}
+	if input.PromptID == 0 {
+		errorResponse(w, http.StatusBadRequest, "prompt_id is required")
+		return
+	}
+	if len(input.ImageData) == 0 && input.ImagePath == "" {
+		errorResponse(w, http.StatusBadRequest, "either image_data or image_path is required")
+		return
+	}
+	if input.Width < 0 || input.Height < 0 {
+		errorResponse(w, http.StatusBadRequest, "width and height must be non-negative")
+		return
+	}
+	if input.ImageFormat == "" {
+		input.ImageFormat = "png"
+	}
+
+	var exists int
+	if err := db.QueryRow("SELECT COUNT(*) FROM users WHERE id = ?", input.UserID).Scan(&exists); err != nil {
+		errorLog.Printf("Database query failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database query failed")
+		return
+	}
+	if exists == 0 {
+		errorResponse(w, http.StatusBadRequest, "user does not exist")
+		return
+	}
+
+	if err := db.QueryRow("SELECT COUNT(*) FROM prompts WHERE id = ?", input.PromptID).Scan(&exists); err != nil {
+		errorLog.Printf("Database query failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database query failed")
+		return
+	}
+	if exists == 0 {
+		errorResponse(w, http.StatusBadRequest, "prompt does not exist")
+		return
+	}
+
+	result, err := db.Exec(
+		"INSERT INTO images (user_id, prompt_id, image_data, image_path, image_format, width, height) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		input.UserID, input.PromptID, input.ImageData, input.ImagePath, input.ImageFormat, input.Width, input.Height,
+	)
+	if err != nil {
+		errorLog.Printf("Database insert failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database insert failed")
+		return
+	}
+
+	id, _ := result.LastInsertId()
+
+	var image Image
+	if err := db.QueryRow("SELECT id, user_id, prompt_id, image_data, image_path, image_format, width, height, created_at FROM images WHERE id = ?", id).Scan(
+		&image.ID, &image.UserID, &image.PromptID, &image.ImageData, &image.ImagePath, &image.ImageFormat, &image.Width, &image.Height, &image.CreatedAt,
+	); err != nil {
+		errorLog.Printf("Failed to retrieve created image: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "failed to retrieve created image")
+		return
+	}
+
+	infoLog.Printf("Image created: ID %d (user %d, prompt %d)", image.ID, image.UserID, image.PromptID)
+	writeJSON(w, http.StatusCreated, image)
 }
 
-// TODO: handleUpdateImage 处理 PUT /images/{id}
+// NOTE: no neccessary to implement handleUpdateImage 处理 PUT /images/{id}
 func handleUpdateImage(w http.ResponseWriter, _ *http.Request) {
 	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
 }
 
-// TODO: handleDeleteImage 处理 DELETE /images/{id}
-func handleDeleteImage(w http.ResponseWriter, _ *http.Request) {
-	errorResponse(w, http.StatusNotImplemented, "not implemented yet")
+// handleDeleteImage 处理 DELETE /images/{id}
+//
+//	@Summary		Delete an image
+//	@Description	Delete an existing image
+//	@Tags			images
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"Image ID"
+//	@Success		204	{object}	nil
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/images/{id} [delete]
+func handleDeleteImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.Header().Set("Allow", http.MethodDelete)
+		errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	idStr := strings.TrimPrefix(r.URL.Path, "/images/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid image ID")
+		return
+	}
+
+	//同时删除对应的prompts
+	result, err := db.Exec("DELETE FROM prompts WHERE id = (SELECT prompt_id FROM images WHERE id = ?)", id)
+	if err != nil {
+		errorLog.Printf("Database delete failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database delete failed")
+		return
+	}
+
+	_, err = result.RowsAffected()
+	if err != nil {
+		errorLog.Printf("Failed to get affected rows: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "failed to get affected rows")
+		return
+	}
+
+	result, err = db.Exec("DELETE FROM images WHERE id = ?", id)
+	if err != nil {
+		errorLog.Printf("Database delete failed: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "database delete failed")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		errorLog.Printf("Failed to get affected rows: %v", err)
+		errorResponse(w, http.StatusInternalServerError, "failed to get affected rows")
+		return
+	}
+	if rowsAffected == 0 {
+		errorResponse(w, http.StatusNotFound, "image not found")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // TODO: handleResetPassword 处理密码重置
@@ -1291,6 +1553,14 @@ func main() {
 	//	@Summary		Login API
 	//	@Description	User login endpoint
 	//	@Tags			auth
+	//	@Accept			json
+	//	@Produce		json
+	//	@Param			credentials	body		LoginRequest	true	"Login credentials"
+	//	@Success		200			{object}	LoginResponse	"Login successful"
+	//	@Failure		400			{object}	map[string]string
+	//	@Failure		401			{object}	map[string]string
+	//	@Failure		500			{object}	map[string]string
+	//	@Router			/login [post]
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
@@ -1301,6 +1571,17 @@ func main() {
 	})
 
 	// 注册路由（不需要认证）
+	//	@Summary		Register API
+	//	@Description	User registration endpoint
+	//	@Tags			auth
+	//	@Accept			json
+	//	@Produce		json
+	//	@Param			user	body		CreateUserInput	true	"User registration data"
+	//	@Success		201		{object}	User			"Created user"
+	//	@Failure		400		{object}	ErrorResponse	"Bad request"
+	//	@Failure		409		{object}	ErrorResponse	"Conflict (username already exists)"
+	//	@Failure		500		{object}	ErrorResponse	"Internal server error"
+	//	@Router			/register [post]
 	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
@@ -1351,90 +1632,110 @@ func main() {
 	//	@Summary		User API
 	//	@Description	RESTful User API endpoints
 	//	@Tags			users
+	//	@Security		BearerAuth
 	mux.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handleListUsers(w, r)
-		case http.MethodPost:
-			handleCreateUser(w, r)
-		default:
-			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
-			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
-		}
+		//需要认证
+		authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				handleListUsers(w, r)
+			case http.MethodPost:
+				handleCreateUser(w, r)
+			default:
+				w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
+				errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+		})(w, r)
 	})
 
 	mux.HandleFunc("/users/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handleGetUser(w, r)
-		case http.MethodPut:
-			handleUpdateUser(w, r)
-		case http.MethodDelete:
-			handleDeleteUser(w, r)
-		default:
-			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
-			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
-		}
+		//需要认证
+		authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				handleGetUser(w, r)
+			case http.MethodPut:
+				handleUpdateUser(w, r)
+			case http.MethodDelete:
+				handleDeleteUser(w, r)
+			default:
+				w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
+				errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+		})(w, r)
 	})
 
 	// 图片管理路由
 	//	@Summary		Image API
 	//	@Description	RESTful Image API endpoints
 	//	@Tags			images
+	//	@Security		BearerAuth
 	mux.HandleFunc("/images", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handleListImages(w, r)
-		case http.MethodPost:
-			handleCreateImage(w, r)
-		default:
-			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
-			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
-		}
+		//需要认证
+		authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				handleListImages(w, r)
+			case http.MethodPost:
+				handleCreateImage(w, r)
+			default:
+				w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
+				errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+		})(w, r)
 	})
 
 	mux.HandleFunc("/images/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handleGetImage(w, r)
-		case http.MethodPut:
-			handleUpdateImage(w, r)
-		case http.MethodDelete:
-			handleDeleteImage(w, r)
-		default:
-			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
-			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
-		}
+		//需要认证
+		authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				handleGetImage(w, r)
+			case http.MethodPut:
+				handleUpdateImage(w, r)
+			case http.MethodDelete:
+				handleDeleteImage(w, r)
+			default:
+				w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
+				errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+		})(w, r)
 	})
 
-	// Prompt 管理路 不需要认证
+	// Prompt 管理路 	需要认证
 	//	@Summary		Prompt API
 	//	@Description	RESTful Prompt API endpoints
 	//	@Tags			prompts
+	//	@Security		BearerAuth
 	mux.HandleFunc("/prompts", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handleListPrompts(w, r)
-		case http.MethodPost:
-			handleCreatePrompt(w, r)
-		default:
-			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
-			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
-		}
+		authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				handleListPrompts(w, r)
+			case http.MethodPost:
+				handleCreatePrompt(w, r)
+			default:
+				w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
+				errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+		})(w, r)
 	})
 
 	mux.HandleFunc("/prompts/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handleGetPrompt(w, r)
-		case http.MethodPut:
-			handleUpdatePrompt(w, r)
-		case http.MethodDelete:
-			handleDeletePrompt(w, r)
-		default:
-			w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
-			errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
-		}
+		//需要认证
+		authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				handleGetPrompt(w, r)
+			case http.MethodPut:
+				handleUpdatePrompt(w, r)
+			case http.MethodDelete:
+				handleDeletePrompt(w, r)
+			default:
+				w.Header().Set("Allow", http.MethodGet+", "+http.MethodPut+", "+http.MethodDelete)
+				errorResponse(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+		})(w, r)
 	})
 
 	// 密码重置路由

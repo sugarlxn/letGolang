@@ -4,6 +4,39 @@ consumes:
 - application/json
 - application/json
 definitions:
+  main.Image:
+    description: Image 图片结构体
+    properties:
+      created_at:
+        description: "@Description\tImage creation time"
+        type: string
+      height:
+        description: "@Description\tImage height"
+        type: integer
+      id:
+        description: "@Description\tImage ID"
+        type: integer
+      image_data:
+        description: "@Description\tImage data"
+        items:
+          type: integer
+        type: array
+      image_format:
+        description: "@Description\tImage format (e.g., png, jpg)"
+        type: string
+      image_path:
+        description: "@Description\tImage path"
+        type: string
+      prompt_id:
+        description: "@Description\tImage prompt ID"
+        type: integer
+      user_id:
+        description: "@Description\tImage user ID"
+        type: integer
+      width:
+        description: "@Description\tImage width"
+        type: integer
+    type: object
   main.LoginRequest:
     properties:
       password:
@@ -115,6 +148,156 @@ paths:
       summary: Health check
       tags:
       - health
+  /images:
+    get:
+      consumes:
+      - application/json
+      description: Get all images from database
+      parameters:
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/main.Image'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List all images
+      tags:
+      - images
+    post:
+      consumes:
+      - application/json
+      description: Create a new image in database
+      parameters:
+      - description: Image object
+        in: body
+        name: image
+        required: true
+        schema:
+          $ref: '#/definitions/main.Image'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.Image'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new image
+      tags:
+      - images
+  /images/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an existing image
+      parameters:
+      - description: Image ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete an image
+      tags:
+      - images
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a specific image by its ID
+      parameters:
+      - description: Image ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Image'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get an image by ID
+      tags:
+      - images
   /login:
     post:
       consumes:
